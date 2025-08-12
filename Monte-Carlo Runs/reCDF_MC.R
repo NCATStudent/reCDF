@@ -126,6 +126,8 @@ sim.f2 = function(N,
   }
   
   
+  /Users/jeremyflood/Library/CloudStorage/OneDrive-Personal/Documents/'Grad School'/2024-2025/'Fall 2025'/reCDF/
+  
   
   pop = as.data.frame(cbind(X, y)) %>%
     mutate(mnar_strat = ifelse(y < median(y), "0", "1") %>% as.factor() 
