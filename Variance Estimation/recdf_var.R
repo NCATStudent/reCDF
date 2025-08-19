@@ -356,6 +356,60 @@ samp.f <- function(samp, A, B_MAR_nA, B_MAR_20nA, B_MNAR_1nA, B_MNAR_20nA, r, po
 
 
     quant_est <- function(F_N, nA) {
+      # sorry this is so messy, but ie_result is needed
+      ### EXCUSE THE MESS
+      
+      # R
+      q_mlm <- function(a, b, e_ecdf = e_ecdf) {
+        return(e_ecdf(a - b) %>% mean())
+      }
+      
+      vq <- Vectorize(q_mlm,
+                      vectorize.args = "a"
+      )
+      
+      mlm_df <- data.frame(
+        probs = vq(lm_pred_A, lm_pred_A, e_ecdf = e_ecdf),
+        t = lm_pred_A
+      ) %>%
+        arrange(probs)
+      
+      ie_fun <- function(dats, a) {
+        return(dats %>%
+                 lapply(dplyr::filter, probs >= a) %>%
+                 lapply(function(x) {
+                   if (nrow(x) == 0) {
+                     data.frame(
+                       probs = NA,
+                       t = NA
+                     )
+                   } else {
+                     x
+                   }
+                 }) %>%
+                 lapply(setNames, c("probs", "t")) %>%
+                 lapply(dplyr::arrange, t) %>%
+                 lapply(dplyr::slice, 1) %>%
+                 lapply(dplyr::select, -probs) %>%
+                 bind_rows() %>%
+                 mutate(
+                   name = c(
+                     "m_lm"
+                   ) %>% as.factor(),
+                   a = a
+                 ) %>%
+                 dplyr::select(a, name, t))
+      }
+      
+      ie_result <- mapply(
+        FUN = ie_fun,
+        a = F_N,
+        MoreArgs = list(dats = list(
+          mlm_df
+        )),
+        SIMPLIFY = FALSE
+      )
+      ## OK WE"RE DONE
       a.a <- F_N
       hatq <- ie_result %>%
         bind_rows() %>%
@@ -364,10 +418,14 @@ samp.f <- function(samp, A, B_MAR_nA, B_MAR_20nA, B_MNAR_1nA, B_MNAR_20nA, r, po
         dplyr::select(t) %>%
         unlist() %>%
         unname()
+      
+   
+      hatF_hatT <- (1 / sum(A$weight)) * sum(A$weight * e_ecdf(hatq - lm_pred_A))
+        
 
       v1 <- (1 - nA / N) / nA * var(e_ecdf(hatq - lm_pred_A))
 
-      # this part has to get the max, fair warning :/
+      # this part has to get the min, fair warning :/
       raw_index <- expand.grid(i_it = 1:nA, h_it = 1:nA)
 
       Rh_df <- A[raw_index["h_it"] %>% unlist(), ] %>%
@@ -449,37 +507,13 @@ samp.f <- function(samp, A, B_MAR_nA, B_MAR_20nA, B_MNAR_1nA, B_MNAR_20nA, r, po
         unname()
 
       q_var <- vars_q
-      return(list(data.frame(F_N, hatq, q_var, LL.q_N, UL.q_N)))
+      return(list(data.frame(F_N, hatq, q_var, LL.q_N, UL.q_N, hatF_hatT)))
     }
 
 
     # idea here -- don't run asymp variance for boot reps
     if (isboot == TRUE) {
       # Quantile Estimation
-
-      ## A
-      A_df <- data.frame(
-        probs = ecdf_A(A$y),
-        t = A$y
-      ) %>%
-        arrange(probs)
-
-      # B
-      B_df <- data.frame(
-        probs = ecdf_B(B$y),
-        t = B$y
-      ) %>%
-        arrange(probs)
-
-
-      # P
-
-      plm_df <- data.frame(
-        probs = ecdf_lm[[1]](lm_pred_A),
-        t = lm_pred_A
-      ) %>%
-        arrange(probs)
-
 
       # R
       q_mlm <- function(a, b, e_ecdf = e_ecdf) {
@@ -516,9 +550,6 @@ samp.f <- function(samp, A, B_MAR_nA, B_MAR_20nA, B_MNAR_1nA, B_MNAR_20nA, r, po
           bind_rows() %>%
           mutate(
             name = c(
-              "A_plug",
-              "B_plug",
-              "lm_plug",
               "m_lm"
             ) %>% as.factor(),
             a = a
@@ -530,9 +561,6 @@ samp.f <- function(samp, A, B_MAR_nA, B_MAR_20nA, B_MNAR_1nA, B_MNAR_20nA, r, po
         FUN = ie_fun,
         a = F_N,
         MoreArgs = list(dats = list(
-          A_df,
-          B_df,
-          plm_df,
           mlm_df
         )),
         SIMPLIFY = FALSE
@@ -563,26 +591,27 @@ samp.f <- function(samp, A, B_MAR_nA, B_MAR_20nA, B_MNAR_1nA, B_MNAR_20nA, r, po
             val = "mc"
           ))
 
-   
-      for(i in 1:length(F_N)){
-        a.a = F_N[i]
-        hatq[i] = ie_result %>%
+      hatF_hatT <- hatq <- LL.q <- UL.q <- q_var <- c()
+      for (i in 1:length(F_N)) {
+        a.a <- F_N[i]
+        hatq[i] <- ie_result %>%
           bind_rows() %>%
-          filter(name == 'm_lm') %>%
+          filter(name == "m_lm") %>%
           filter(a == a.a) %>%
-          dplyr::select(t)%>% 
+          dplyr::select(t) %>%
           unlist() %>%
           unname()
-        
+
+        hatF_hatT[i] <- (1 / sum(A$weight)) * sum(A$weight * e_ecdf(hatq[i] - lm_pred_A))
+
         # since I have to do a for-loop anyway...
-        
-        LL.q[i] = UL.q[i] = q_var[i] = NA
-        
+
+        LL.q[i] <- UL.q[i] <- q_var[i] <- NA
       }
 
-      names(LL.q) <- names(UL.q) <- names(hatq) <- names(q_N)
+      names(LL.q) <- names(UL.q) <- names(hatq) <- names(hatF_hatT) <- names(q_N)
 
-      q_var_df <- rbind(q_N, hatq, q_var, LL.q, UL.q) %>%
+      q_var_df <- rbind(q_N, hatq, q_var, LL.q, UL.q, hatF_hatT) %>%
         as.data.frame() %>%
         rownames_to_column("name") %>%
         mutate(group = "q", val = "var")
@@ -597,7 +626,8 @@ samp.f <- function(samp, A, B_MAR_nA, B_MAR_20nA, B_MNAR_1nA, B_MNAR_20nA, r, po
           "hatq",
           "q_var",
           "LL.q",
-          "UL.q"
+          "UL.q",
+          "hatF_hatT"
         )) %>%
         as.data.frame() %>%
         dplyr::slice(-2) %>%
@@ -637,27 +667,30 @@ samp.f <- function(samp, A, B_MAR_nA, B_MAR_20nA, B_MNAR_1nA, B_MNAR_20nA, r, po
       UL.q_N <- qvar_results %>%
         dplyr::select("UL.q_N") %>%
         unlist()
+      
+      hatF_hatT <- qvar_results %>%
+        dplyr::select("hatF_hatT") %>%
+        unlist()
 
 
-      names(LL.q_N) <- names(UL.q_N) <- names(hatq) <- names(q_N)
+      names(LL.q_N) <- names(UL.q_N) <- names(hatq) <- names(hatF_hatT) <- names(q_N) 
 
-      q_var_df <- rbind(q_N, hatq, q_var, LL.q_N, UL.q_N) %>%
+      q_var_df <- rbind(q_N, hatq, q_var, LL.q_N, UL.q_N, hatF_hatT) %>%
         as.data.frame() %>%
         rownames_to_column("name") %>%
         mutate(group = "q_N", val = "var")
 
       final_df <- rbind(
         final_cdf,
-        final_quant,
         q_var_df
       ) %>%
-        filter(name %in% c(
-          "m_lm",
-          "hatq",
-          "q_var",
-          "LL.q_N",
-          "UL.q_N"
-        )) %>%
+        # filter(name %in% c(
+        #   "m_lm",
+        #   "hatq",
+        #   "q_var",
+        #   "LL.q_N",
+        #   "UL.q_N"
+        # )) %>%
         as.data.frame() %>%
         dplyr::slice(-2) %>%
         rbind(t(vars_to) %>%
@@ -792,11 +825,11 @@ samp.f <- function(samp, A, B_MAR_nA, B_MAR_20nA, B_MNAR_1nA, B_MNAR_20nA, r, po
     results.MNAR_1nA %>% bind_rows() %>% mutate(nB = nA, miss = "MNAR"),
     results.MNAR_20nA %>% bind_rows() %>% mutate(nB = 20 * nA, miss = "MNAR")
   ) %>%
-    lapply(filter, name %in% c('m_lm', 'hatq')) %>%
-    lapply(mutate, name = ifelse(name == 'hatq', 'hatq_orig_boot', name))
+    lapply(filter, name %in% c("m_lm", "hatq", "hatF_hatT"))
 
 
-
+  # Testing
+  #B_perm = Bs_MNAR_20nA[[1]]
   var_calcs <- function(A_perm, B_perm, L, alp, da_miss, da_nB) {
     actual <- var_cdf(
       A = A_perm,
@@ -806,45 +839,52 @@ samp.f <- function(samp, A, B_MAR_nA, B_MAR_20nA, B_MNAR_1nA, B_MNAR_20nA, r, po
       da_miss = da_miss,
       isboot = FALSE
     )
-    
-    ## hey I stopped here.
+
 
     standard_values <-
       actual %>%
       filter(name %in% c(
         "m_lm",
-        "hatq"
+        "hatq",
+        "hatF_hatT"
       )) %>%
       dplyr::select(nB, miss, name, everything()) %>%
       pivot_longer(
         cols = 4:ncol(.),
         names_to = "perc",
-        values_to = "standard"
+        values_to = "B_vals"
       )
 
-    boot_var <- results2 %>%
+    #raw_boot_var <-
+      results2 %>%
       bind_rows(.id = "iter") %>%
       filter(miss == da_miss, nB == da_nB) %>%
       filter(name %in% c(
         "m_lm",
-        "hatq"
+        "hatq",
+        'hatF_hatT'
       )) %>%
       dplyr::select(iter, name, miss, nB, everything()) %>%
       pivot_longer(
         cols = 5:ncol(.),
         names_to = "perc",
-        values_to = "estimate"
+        values_to = "boot_vals"
       ) %>%
       left_join(standard_values,
         by = c("nB", "miss", "name", "perc")
       ) %>%
       group_by(nB, miss, name, perc) %>%
       dplyr::summarize(
-        boot_mean_est = mean(estimate),
-        B_perm_est = mean(standard),
-        boot_var = (1 / L) * sum_((estimate - standard)^2)
-      ) %>%
-      dplyr::select(nB, miss, name, perc, boot_var, everything()) %>%
+        boot_mean_est = mean(boot_vals, na.rm = TRUE),
+        B_perm_est = mean(B_vals, na.rm = TRUE),
+        boot_var = (1 / L) * sum_((boot_vals - B_vals)^2)
+      )
+ # ugh -- am stopping for today
+    # notice -- I call it 'raw boot var' because it's literally the simple variance of bootstrapped replicates. But notice we propose a different variance estimator for our quantile estimator.
+
+
+    # %>%
+    dplyr::select(nB, miss, name, perc, boot_var, everything()) %>%
       pivot_longer(cols = 6:ncol(.), names_to = "bootstats") %>%
       pivot_wider(values_from = c("boot_var", "value")) %>%
       pivot_longer(cols = 7:8, names_to = "bootstats_est", values_to = "bootstats_value") %>%
