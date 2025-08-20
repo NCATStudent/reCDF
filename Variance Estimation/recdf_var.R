@@ -874,15 +874,15 @@ samp.f <- function(samp, A, B_MAR_nA, B_MAR_20nA, B_MNAR_1nA, B_MNAR_20nA, r, po
         values_to = "B_vals"
       )
 
-    raw_boot_var <-
+    boot_var <-
       results2 %>%
       bind_rows(.id = "iter") %>%
       dplyr::select(-c(probs, t)) %>%
       filter(miss == da_miss, nB == da_nB) %>%
       filter(name %in% c(
         "m_lm",
-        "hatq"
-        # "hatF_hatT" (no longer needed)
+        "hatq",
+        "hatF_hatT"
       )) %>%
       dplyr::select(iter, name, miss, nB, everything()) %>%
       pivot_longer(
@@ -906,112 +906,35 @@ samp.f <- function(samp, A, B_MAR_nA, B_MAR_20nA, B_MNAR_1nA, B_MNAR_20nA, r, po
       dplyr::select(-bootstats) %>%
       dplyr::select(nB, miss, perc, everything())
 
-    # now we must get our bootstrapped variance
-    crit_vals <- raw_boot_var %>%
-      dplyr::select(nB, miss, perc, boot_var_hatF_hatT) %>%
-      mutate(
-        F_N = F_N,
-        critval_LL = F_N - qnorm(1 - alp / 2) * sqrt(boot_var_hatF_hatT),
-        critval_UL = F_N + qnorm(1 - alp / 2) * sqrt(boot_var_hatF_hatT)
-      ) %>%
-      dplyr::select(critval_LL, critval_UL)
-
-    mlm_df <- asymp_var_cdf[[2]]
-
-    LL_q <- UL_q <- c()
-    for (i in 1:nrow(crit_vals)) {
-      LL_q[i] <- mlm_df %>%
-        filter(probs >= crit_vals[i, "critval_LL"] %>% unlist()) %>%
-        arrange(t) %>%
-        dplyr::slice(1) %>%
-        dplyr::select(t) %>%
-        unlist()
-
-      UL_q[i] <- mlm_df %>%
-        filter(probs >= crit_vals[i, "critval_UL"] %>% unlist()) %>%
-        arrange(t) %>%
-        dplyr::slice(1) %>%
-        dplyr::select(t) %>%
-        unlist()
-    }
-
-    hatq_df <- actual %>%
-      filter(name == "hatq") %>%
-      dplyr::select(name, nB, miss, everything()) %>%
-      pivot_longer(cols = 4:ncol(.), names_to = "perc", values_to = "hatq")
-
-    data.frame(
-      LL_q = LL_q, UL_q = UL_q, boot_var = 'h'
-    ) %>%
-      mutate(boot_var = ((UL_q - LL_q) / (2 * qnorm(1 - alp / 2)))^2) %>%
-      mutate(name = "hatq", nB = da_nB, miss = da_miss, F_N = F_N) %>%
-      mutate(perc = paste0(F_N * 100, "%")) %>%
-      left_join(hatq_df, by = c("name", "nB", "miss", "perc")) %>%
-      dplyr::select(perc, boot_var, hatq) %>%
-      mutate(LL = hatq - qnorm(1 - alp / 2) * sqrt(boot_var),
-             UL = hatq + qnorm(1 - alp / 2) * sqrt(boot_var))
-
-
-    #
-    #  # boot_var  =
-    #  #   results2 %>%
-    #  #   bind_rows(.id = 'iter') %>%
-    #  #   filter(name %in% c('m_lm',
-    #  #                      'hatq')) %>%
-    #  #   dplyr::select(iter, name, miss, nB, everything()) %>%
-    #  #   pivot_longer(cols = 5:ncol(.),
-    #  #                names_to = 'perc',
-    #  #                values_to = 'estimate') %>%
-    #  #   filter(nB == da_nB, miss == da_miss) %>%
-    #  #   left_join(standard_values,
-    #  #             by = c('name', 'perc', 'miss', 'nB')) %>%
-    #  #   group_by(name, perc, miss, nB) %>%
-    #  #   dplyr::summarize(boot_var = (1/L)*sum_((estimate - standard)^2)) %>%
-    #  #   pivot_wider(values_from = 'boot_var') %>%
-    #  #   setNames(c('perc',
-    #  #              'miss',
-    #  #              'nB',
-    #  #              'bs_hatq',
-    #  #              'bs_mlm'))
-    #  #
-    #
-
     pop_quant <- data.frame(F_N = F_N, q_N = q_N, perc = paste0(F_N * 100, "%"))
 
 
-    bigguy <- actual %>%
+    bigguy <-
+      actual %>%
       dplyr::select(nB, miss, name, everything()) %>%
       pivot_longer(cols = 4:ncol(.), names_to = "perc") %>%
       pivot_wider() %>%
-      left_join(boot_var, by = c("nB", "miss", "perc")) %>%
-      # dplyr::select(nB, miss, name, everything()) %>%
-      # pivot_longer(cols = 4:ncol(.),
-      #              names_to = 'perc') %>%
-      # pivot_wider() %>%
-      # left_join(boot_var, by = c('perc', 'miss', 'nB'))  %>%
-      left_join(pop_quant, by = "perc")
+      left_join(boot_var %>%
+                  dplyr::select(-c(value_hatq, value_m_lm, value_hatF_hatT)), by = c("nB", "miss", "perc"))
 
-
+    # reCDF est variance
     mlm_varsum <-
       bigguy %>%
       dplyr::select(
         F_N, nB, miss, perc,
         m_lm,
-        bootstats,
-        bootstats_est,
-        bootstats_value,
         m_lm_var,
         boot_var_m_lm
       ) %>%
       setNames(c(
         "pop_quant", "nB", "miss", "perc",
         "est_quant",
-        "bootstats", "bootstats_est", "bootstats_value",
         "asymp",
         "boot"
       )) %>%
+      dplyr::select(asymp, boot, everything()) %>%
       pivot_longer(
-        cols = 9:ncol(.),
+        cols = 1:2,
         names_to = "var_type",
         values_to = "var_val"
       ) %>%
@@ -1020,7 +943,7 @@ samp.f <- function(samp, A, B_MAR_nA, B_MAR_20nA, B_MNAR_1nA, B_MNAR_20nA, r, po
         LL = est_quant - qnorm(p = 1 - alp / 2) * sqrt(var_val),
         UL = est_quant + qnorm(p = 1 - alp / 2) * sqrt(var_val)
       ) %>%
-      mutate(CR = ifelse(F_N >= LL & F_N <= UL, 1, 0)) %>%
+      mutate(CR = ifelse(pop_quant >= LL & pop_quant <= UL, 1, 0)) %>%
       dplyr::select(
         nB, miss,
         perc,
@@ -1031,35 +954,30 @@ samp.f <- function(samp, A, B_MAR_nA, B_MAR_20nA, B_MNAR_1nA, B_MNAR_20nA, r, po
         everything()
       ) %>%
       ungroup() %>%
-      mutate(est_type = "cdf") %>%
-      filter(bootstats_est == "m_lm") %>%
-      dplyr::select(-bootstats_est)
+      mutate(est_type = "cdf")
 
-    # q_var is NOT the variance of qhat -- bad naming, Jeremy!! q_var is the estimated variance of F(hat(T))
+    ## recall, q_var is the estimated variance of F(hat(T))
 
+    # quantile
     hatq_varsum <-
       bigguy %>%
       dplyr::select(
         q_N, LL.q_N, UL.q_N, nB, miss, perc,
         hatq,
-        bootstats,
-        bootstats_est,
-        bootstats_value,
         boot_var_hatq
       ) %>%
       setNames(c(
         "pop_quant", "LL.q_N", "UL.q_N", "nB", "miss", "perc",
-        "est_quant", "bootstats", "bootstats_est", "bootstats_value",
+        "est_quant",
         "boot"
       )) %>%
-      mutate(asymp = (UL.q_N - LL.q_N)^2 / (2 * qnorm(1 - (alp / 2)))) %>%
+      mutate(asymp = ((UL.q_N - LL.q_N) / (2 * qnorm(1 - (alp / 2))))^2) %>%
       dplyr::select(
-        pop_quant, LL.q_N, UL.q_N, nB, miss, perc, est_quant,
-        bootstats, bootstats_est, bootstats_value,
-        boot, asymp
+        boot, asymp,
+        pop_quant, LL.q_N, UL.q_N, nB, miss, perc, est_quant
       ) %>%
       pivot_longer(
-        cols = 11:ncol(.),
+        cols = 1:2,
         names_to = "var_type",
         values_to = "var_val"
       ) %>%
@@ -1075,27 +993,85 @@ samp.f <- function(samp, A, B_MAR_nA, B_MAR_20nA, B_MNAR_1nA, B_MNAR_20nA, r, po
         )
       ) %>%
       dplyr::select(-c(LL.q_N, UL.q_N)) %>%
-      # ungroup() %>%
-      # left_join(bigguy %>%
-      #             dplyr::select(perc, LL.q_N, UL.q_N) %>%
-      #             mutate(var_type = 'asymp') %>%
-      #             dplyr::select(perc, var_type, everything()) %>%
-      #             setNames(c('perc', 'var_type', 'LL_other','UL_other')),
-      #           by = c('perc', 'var_type')) %>%
-      # rowwise() %>%
-      # mutate(LL = ifelse(is.na(LL) == FALSE,
-      #                    LL, LL_other
-      # ),
-      # UL =ifelse(is.na(UL) == FALSE,
-      #            UL, UL_other)
-      # ) %>%
-      # dplyr::select(-c(LL_other,
-      #                  UL_other)) %>%
       mutate(CR = ifelse(pop_quant >= LL & pop_quant <= UL, 1, 0)) %>%
       ungroup() %>%
-      mutate(est_type = "t") %>%
-      filter(bootstats_est == "hatq") %>%
-      dplyr::select(-bootstats_est)
+      mutate(est_type = "t")
+    
+    # new bootstrapped based confidence interval
+   crit_vals <- 
+    boot_var %>%
+      dplyr::select(nB, miss, perc, boot_var_hatF_hatT) %>%
+      mutate(pop_quant = F_N) %>%
+      mutate(
+        critval_LL = pop_quant - qnorm(1 - alp / 2) * sqrt(boot_var_hatF_hatT),
+        critval_UL = pop_quant + qnorm(1 - alp / 2) * sqrt(boot_var_hatF_hatT)
+      ) %>%
+      dplyr::select(critval_LL, critval_UL)
+    
+    mlm_df <- asymp_var_cdf[[2]]
+    
+    LL_q <- UL_q <- c()
+    for (i in 1:nrow(crit_vals)) {
+      LL_q[i] <- mlm_df %>%
+        filter(probs >= crit_vals[i, "critval_LL"] %>% unlist()) %>%
+        arrange(t) %>%
+        dplyr::slice(1) %>%
+        dplyr::select(t) %>%
+        unlist()
+      
+      UL_q[i] <- mlm_df %>%
+        filter(probs >= crit_vals[i, "critval_UL"] %>% unlist()) %>%
+        arrange(t) %>%
+        dplyr::slice(1) %>%
+        dplyr::select(t) %>%
+        unlist()
+    }
+    
+    proposed_boot_results <- 
+    actual %>%
+      filter(name == "hatq") %>%
+      dplyr::select(name, nB, miss, everything()) %>%
+      pivot_longer(cols = 4:ncol(.), names_to = "perc", values_to = "hatq") %>%
+      mutate(LL = LL_q, UL = UL_q) %>%
+      mutate(pop_quant = q_N) %>%
+      mutate(CR = ifelse(pop_quant >= LL & pop_quant <= UL, 1, 0),
+             var_val =  ((UL - LL) / (2 * qnorm(1 - (alp / 2))))^2) %>%
+      mutate(est_quant = hatq,
+             var_type = 'boot2',
+             est_type = 't') %>%
+      dplyr::select(colnames(hatq_varsum))
+    
+    hatq_varsum %>%
+      bind_rows(proposed_boot_results) %>%
+      arrange(est_quant)
+      mutate(boot3_LL = hatq - qnorm(1-alp/2)*estvar, boot3_UL =  hatq + qnorm(1-alp/2)*estvar) %>%
+      
+      mutate(CR_boot3 = ifelse(pop_quant >= LL & 
+                               pop_quant <= UL , 1, 0)) %>%
+      dplyr::select(nB, miss, perc, hatq, pop_quant, estvar, LL, UL, CR, CR_boot3)#%>%
+      pivot_longer(cols = 7:8, names_to = 'LL_type', values_to = 'LL') %>%
+      dplyr::select(boot2_UL, boot3_UL, everything()) %>%
+      pivot_longer(cols = 1:2, names_to = 'UL_type', values_to = 'UL') %>%
+      dplyr::select(CR_2, CR_3, everything()) %>%
+      pivot_longer(cols = 1:2, names_to = 'CR_type', values_to = 'CR') %>%
+      mutate(LL_type = LL_type %>% gsub(pattern = '_LL', replacement = ''),
+             UL_type = LL_type %>% gsub(pattern = '_UL', replacement = ''),
+             CR_type = CR_type %>% gsub(pattern = 'CR_', replacement = 'boot'),
+             ) %>%
+      arrange(LL_type, UL_type, CR_type)
+      mutate(name = ifelse(name == 'CR_proposed', 'boot_proposed', 'boot_new'))
+    
+    data.frame(
+      boot2_LL = LL_q, boot2_UL = UL_q, pop_quant = q_N
+    )#%>%
+      mutate(CR = ifelse(pop_quant >= boot2_LL & pop_quant <= boot2_UL, 1, 0))
+      mutate(boot_var = ((UL_q - LL_q) / (2 * qnorm(1 - alp / 2)))^2) %>%
+      mutate(name = "hatq", nB = da_nB, miss = da_miss, F_N = F_N) %>%
+      mutate(perc = paste0(F_N * 100, "%")) %>%
+      left_join(hatq_df, by = c("name", "nB", "miss", "perc")) %>%
+      dplyr::select(perc, boot_var, hatq) %>%
+      mutate(LL = hatq - qnorm(1 - alp / 2) * sqrt(boot_var),
+             UL = hatq + qnorm(1 - alp / 2) * sqrt(boot_var))
 
     final <- rbind(mlm_varsum, hatq_varsum) %>%
       dplyr::select(est_type, nB, miss, perc, everything())
