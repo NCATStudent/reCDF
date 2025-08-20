@@ -215,7 +215,7 @@ Bs_MNAR_20nA <- mclapply(1:nsim, function(seed) {
 samp.f <- function(samp, A, B_MAR_nA, B_MAR_20nA, B_MNAR_1nA, B_MNAR_20nA, r, pop, p, miss, L = 500, mc_cores = 15, alp = .10, seed = 101) {
   options(dplyr.summarise.inform = FALSE)
 
-  var_cdf <- function(B, A, p, alp, da_miss, isboot) {
+  var_cdf <- function(B, A, p, alp, da_miss, isboot, mc_cores = 15) {
     nA <- nrow(A)
     nB <- nrow(B)
     # defining A
@@ -315,14 +315,14 @@ samp.f <- function(samp, A, B_MAR_nA, B_MAR_20nA, B_MNAR_1nA, B_MNAR_20nA, r, po
         vars_to[i] <- NA
       }
     } else {
-      vars_to_results <- mapply(
+      vars_to_results <- pbmcmapply(
         FUN = mlm_est_func,
         qN_vals = q_N,
         MoreArgs = (
           list(
             "nA" = nA
           )
-        )
+        ), mc.cores = mc_cores
       )
 
       vars_to <-
@@ -358,49 +358,49 @@ samp.f <- function(samp, A, B_MAR_nA, B_MAR_20nA, B_MNAR_1nA, B_MNAR_20nA, r, po
     quant_est <- function(F_N, nA) {
       # sorry this is so messy, but ie_result is needed
       ### EXCUSE THE MESS
-      
+
       # R
       q_mlm <- function(a, b, e_ecdf = e_ecdf) {
         return(e_ecdf(a - b) %>% mean())
       }
-      
+
       vq <- Vectorize(q_mlm,
-                      vectorize.args = "a"
+        vectorize.args = "a"
       )
-      
+
       mlm_df <- data.frame(
         probs = vq(lm_pred_A, lm_pred_A, e_ecdf = e_ecdf),
         t = lm_pred_A
       ) %>%
         arrange(probs)
-      
+
       ie_fun <- function(dats, a) {
         return(dats %>%
-                 lapply(dplyr::filter, probs >= a) %>%
-                 lapply(function(x) {
-                   if (nrow(x) == 0) {
-                     data.frame(
-                       probs = NA,
-                       t = NA
-                     )
-                   } else {
-                     x
-                   }
-                 }) %>%
-                 lapply(setNames, c("probs", "t")) %>%
-                 lapply(dplyr::arrange, t) %>%
-                 lapply(dplyr::slice, 1) %>%
-                 lapply(dplyr::select, -probs) %>%
-                 bind_rows() %>%
-                 mutate(
-                   name = c(
-                     "m_lm"
-                   ) %>% as.factor(),
-                   a = a
-                 ) %>%
-                 dplyr::select(a, name, t))
+          lapply(dplyr::filter, probs >= a) %>%
+          lapply(function(x) {
+            if (nrow(x) == 0) {
+              data.frame(
+                probs = NA,
+                t = NA
+              )
+            } else {
+              x
+            }
+          }) %>%
+          lapply(setNames, c("probs", "t")) %>%
+          lapply(dplyr::arrange, t) %>%
+          lapply(dplyr::slice, 1) %>%
+          lapply(dplyr::select, -probs) %>%
+          bind_rows() %>%
+          mutate(
+            name = c(
+              "m_lm"
+            ) %>% as.factor(),
+            a = a
+          ) %>%
+          dplyr::select(a, name, t))
       }
-      
+
       ie_result <- mapply(
         FUN = ie_fun,
         a = F_N,
@@ -418,10 +418,10 @@ samp.f <- function(samp, A, B_MAR_nA, B_MAR_20nA, B_MNAR_1nA, B_MNAR_20nA, r, po
         dplyr::select(t) %>%
         unlist() %>%
         unname()
-      
-   
+
+
       hatF_hatT <- (1 / sum(A$weight)) * sum(A$weight * e_ecdf(hatq - lm_pred_A))
-        
+
 
       v1 <- (1 - nA / N) / nA * var(e_ecdf(hatq - lm_pred_A))
 
@@ -641,14 +641,14 @@ samp.f <- function(samp, A, B_MAR_nA, B_MAR_20nA, B_MNAR_1nA, B_MNAR_20nA, r, po
           dplyr::select(colnames(final_cdf))) %>%
         dplyr::select(-c(group, val))
     } else {
-      qvar_results <- mapply(
+      qvar_results <- pbmcmapply(
         FUN = quant_est,
         F_N = F_N,
         MoreArgs = (
           list(
             "nA" = nA
           )
-        )
+        ), mc.cores = mc_cores
       ) %>%
         bind_rows()
 
@@ -667,13 +667,13 @@ samp.f <- function(samp, A, B_MAR_nA, B_MAR_20nA, B_MNAR_1nA, B_MNAR_20nA, r, po
       UL.q_N <- qvar_results %>%
         dplyr::select("UL.q_N") %>%
         unlist()
-      
+
       hatF_hatT <- qvar_results %>%
         dplyr::select("hatF_hatT") %>%
         unlist()
 
 
-      names(LL.q_N) <- names(UL.q_N) <- names(hatq) <- names(hatF_hatT) <- names(q_N) 
+      names(LL.q_N) <- names(UL.q_N) <- names(hatq) <- names(hatF_hatT) <- names(q_N)
 
       q_var_df <- rbind(q_N, hatq, q_var, LL.q_N, UL.q_N, hatF_hatT) %>%
         as.data.frame() %>%
@@ -703,9 +703,26 @@ samp.f <- function(samp, A, B_MAR_nA, B_MAR_20nA, B_MNAR_1nA, B_MNAR_20nA, r, po
           dplyr::select(colnames(final_cdf))) %>%
         dplyr::select(-c(group, val)) %>%
         mutate(nB = nB, miss = da_miss)
+
+      # I know this is messy, but this is actually the easiest way to do this
+
+      # R
+      q_mlm <- function(a, b, e_ecdf = e_ecdf) {
+        return(e_ecdf(a - b) %>% mean())
+      }
+
+      vq <- Vectorize(q_mlm,
+        vectorize.args = "a"
+      )
+
+      mlm_df <- data.frame(
+        probs = vq(lm_pred_A, lm_pred_A, e_ecdf = e_ecdf),
+        t = lm_pred_A
+      ) %>%
+        arrange(probs)
     }
 
-    return(final_df)
+    return(list(final_df, mlm_df))
   }
   # selecting A
 
@@ -786,7 +803,7 @@ samp.f <- function(samp, A, B_MAR_nA, B_MAR_20nA, B_MNAR_1nA, B_MNAR_20nA, r, po
 
   # For each a in A and b in B, compute bootstrap replicates
   #
-  results.MAR_1nA <- mcmapply(
+  results.MAR_1nA <- pbmcmapply(
     FUN = var_cdf,
     A = A_list,
     B = B_list.MAR_1nA,
@@ -795,7 +812,7 @@ samp.f <- function(samp, A, B_MAR_nA, B_MAR_20nA, B_MNAR_1nA, B_MNAR_20nA, r, po
     SIMPLIFY = FALSE
   )
 
-  results.MAR_20nA <- mcmapply(var_cdf,
+  results.MAR_20nA <- pbmcmapply(var_cdf,
     A = A_list,
     B = B_list.MAR_20nA,
     MoreArgs = list("p" = p, "alp" = .10, da_miss = "MAR", isboot = TRUE),
@@ -803,7 +820,7 @@ samp.f <- function(samp, A, B_MAR_nA, B_MAR_20nA, B_MNAR_1nA, B_MNAR_20nA, r, po
     SIMPLIFY = FALSE
   )
 
-  results.MNAR_1nA <- mcmapply(var_cdf,
+  results.MNAR_1nA <- pbmcmapply(var_cdf,
     A = A_list,
     B = B_list.MNAR_1nA,
     MoreArgs = list("p" = p, "alp" = .10, da_miss = "MAR", isboot = TRUE),
@@ -811,7 +828,7 @@ samp.f <- function(samp, A, B_MAR_nA, B_MAR_20nA, B_MNAR_1nA, B_MNAR_20nA, r, po
     SIMPLIFY = FALSE
   )
 
-  results.MNAR_20nA <- mcmapply(var_cdf,
+  results.MNAR_20nA <- pbmcmapply(var_cdf,
     A = A_list,
     B = B_list.MNAR_20nA,
     MoreArgs = list("p" = p, "alp" = .10, da_miss = "MAR", isboot = TRUE),
@@ -829,9 +846,9 @@ samp.f <- function(samp, A, B_MAR_nA, B_MAR_20nA, B_MNAR_1nA, B_MNAR_20nA, r, po
 
 
   # Testing
-  #B_perm = Bs_MNAR_20nA[[1]]
+  # B_perm = Bs_MAR_20nA[[1]]
   var_calcs <- function(A_perm, B_perm, L, alp, da_miss, da_nB) {
-    actual <- var_cdf(
+    asymp_var_cdf <- var_cdf(
       A = A_perm,
       B = B_perm,
       p = p,
@@ -839,6 +856,8 @@ samp.f <- function(samp, A, B_MAR_nA, B_MAR_20nA, B_MNAR_1nA, B_MNAR_20nA, r, po
       da_miss = da_miss,
       isboot = FALSE
     )
+
+    actual <- asymp_var_cdf[[1]]
 
 
     standard_values <-
@@ -855,14 +874,15 @@ samp.f <- function(samp, A, B_MAR_nA, B_MAR_20nA, B_MNAR_1nA, B_MNAR_20nA, r, po
         values_to = "B_vals"
       )
 
-    #raw_boot_var <-
+    raw_boot_var <-
       results2 %>%
       bind_rows(.id = "iter") %>%
+      dplyr::select(-c(probs, t)) %>%
       filter(miss == da_miss, nB == da_nB) %>%
       filter(name %in% c(
         "m_lm",
-        "hatq",
-        'hatF_hatT'
+        "hatq"
+        # "hatF_hatT" (no longer needed)
       )) %>%
       dplyr::select(iter, name, miss, nB, everything()) %>%
       pivot_longer(
@@ -878,18 +898,60 @@ samp.f <- function(samp, A, B_MAR_nA, B_MAR_20nA, B_MNAR_1nA, B_MNAR_20nA, r, po
         boot_mean_est = mean(boot_vals, na.rm = TRUE),
         B_perm_est = mean(B_vals, na.rm = TRUE),
         boot_var = (1 / L) * sum_((boot_vals - B_vals)^2)
-      )
- # ugh -- am stopping for today
-    # notice -- I call it 'raw boot var' because it's literally the simple variance of bootstrapped replicates. But notice we propose a different variance estimator for our quantile estimator.
-
-
-    # %>%
-    dplyr::select(nB, miss, name, perc, boot_var, everything()) %>%
+      ) %>%
+      dplyr::select(nB, miss, name, perc, boot_var, everything()) %>%
       pivot_longer(cols = 6:ncol(.), names_to = "bootstats") %>%
       pivot_wider(values_from = c("boot_var", "value")) %>%
-      pivot_longer(cols = 7:8, names_to = "bootstats_est", values_to = "bootstats_value") %>%
-      mutate(bootstats_est = gsub(x = bootstats_est, pattern = "value_", replacement = "")) %>%
-      dplyr::select(nB, miss, perc, boot_var_hatq, boot_var_m_lm, bootstats, bootstats_est, bootstats_value, everything())
+      filter(bootstats == "boot_mean_est") %>%
+      dplyr::select(-bootstats) %>%
+      dplyr::select(nB, miss, perc, everything())
+
+    # now we must get our bootstrapped variance
+    crit_vals <- raw_boot_var %>%
+      dplyr::select(nB, miss, perc, boot_var_hatF_hatT) %>%
+      mutate(
+        F_N = F_N,
+        critval_LL = F_N - qnorm(1 - alp / 2) * sqrt(boot_var_hatF_hatT),
+        critval_UL = F_N + qnorm(1 - alp / 2) * sqrt(boot_var_hatF_hatT)
+      ) %>%
+      dplyr::select(critval_LL, critval_UL)
+
+    mlm_df <- asymp_var_cdf[[2]]
+
+    LL_q <- UL_q <- c()
+    for (i in 1:nrow(crit_vals)) {
+      LL_q[i] <- mlm_df %>%
+        filter(probs >= crit_vals[i, "critval_LL"] %>% unlist()) %>%
+        arrange(t) %>%
+        dplyr::slice(1) %>%
+        dplyr::select(t) %>%
+        unlist()
+
+      UL_q[i] <- mlm_df %>%
+        filter(probs >= crit_vals[i, "critval_UL"] %>% unlist()) %>%
+        arrange(t) %>%
+        dplyr::slice(1) %>%
+        dplyr::select(t) %>%
+        unlist()
+    }
+
+    hatq_df <- actual %>%
+      filter(name == "hatq") %>%
+      dplyr::select(name, nB, miss, everything()) %>%
+      pivot_longer(cols = 4:ncol(.), names_to = "perc", values_to = "hatq")
+
+    data.frame(
+      LL_q = LL_q, UL_q = UL_q, boot_var = 'h'
+    ) %>%
+      mutate(boot_var = ((UL_q - LL_q) / (2 * qnorm(1 - alp / 2)))^2) %>%
+      mutate(name = "hatq", nB = da_nB, miss = da_miss, F_N = F_N) %>%
+      mutate(perc = paste0(F_N * 100, "%")) %>%
+      left_join(hatq_df, by = c("name", "nB", "miss", "perc")) %>%
+      dplyr::select(perc, boot_var, hatq) %>%
+      mutate(LL = hatq - qnorm(1 - alp / 2) * sqrt(boot_var),
+             UL = hatq + qnorm(1 - alp / 2) * sqrt(boot_var))
+
+
     #
     #  # boot_var  =
     #  #   results2 %>%
