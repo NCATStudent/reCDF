@@ -78,7 +78,7 @@ require(styler)
 
 
 seed <- 101
-nsim <- 500
+nsim <- 1500
 N <- 1e05
 nA <- 1000
 alp <- .10
