@@ -1078,7 +1078,7 @@ for (i in 1:nsim) {
   if(i%%100 == 0){
     setwd('/Users/jeremyflood/Library/CloudStorage/OneDrive-Personal/Documents/Grad School/2024-2025/Fall 2025/reCDF/reCDF/Variance Estimation/Data/Cached Iter Files')
     results[(i-100):100] %>% bind_rows() %>% openxlsx::write.xlsx(
-      paste0('raw_results_iter_',i-100, '_', i, '.xlsx')
+      paste0('f1_raw_results_iter_',i-100, '_', i, '.xlsx')
     )
     progress(i, nsim)
   } else{
