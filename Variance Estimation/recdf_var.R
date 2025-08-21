@@ -212,7 +212,7 @@ Bs_MNAR_20nA <- mclapply(1:nsim, function(seed) {
 
 
 
-samp.f <- function(samp, A, B_MAR_nA, B_MAR_20nA, B_MNAR_1nA, B_MNAR_20nA, r, pop, p, miss, L = 500, mc_cores = 15, alp = .10, seed = 101) {
+samp.f <- function(samp, A, B_MAR_nA, B_MAR_20nA, B_MNAR_1nA, B_MNAR_20nA, r, pop, p, miss, L = 1500, mc_cores = 15, alp = .10, seed = 101) {
   options(dplyr.summarise.inform = FALSE)
 
   var_cdf <- function(B, A, p, alp, da_miss, isboot, mc_cores = 15) {
@@ -1012,19 +1012,21 @@ samp.f <- function(samp, A, B_MAR_nA, B_MAR_20nA, B_MNAR_1nA, B_MNAR_20nA, r, po
     
     LL_q <- UL_q <- c()
     for (i in 1:nrow(crit_vals)) {
-      LL_q[i] <- mlm_df %>%
-        filter(probs >= crit_vals[i, "critval_LL"] %>% unlist()) %>%
-        arrange(t) %>%
-        dplyr::slice(1) %>%
-        dplyr::select(t) %>%
-        unlist()
+      LL_potential =try(mlm_df %>%
+                          filter(probs >= crit_vals[i, "critval_LL"] %>% unlist()) %>%
+                          arrange(t) %>%
+                          dplyr::slice(1) %>%
+                          dplyr::select(t) %>%
+                          unlist(), silent = TRUE)
+      UL_potential = try(mlm_df %>%
+                           filter(probs >= crit_vals[i, "critval_UL"] %>% unlist()) %>%
+                           arrange(t) %>%
+                           dplyr::slice(1) %>%
+                           dplyr::select(t) %>%
+                           unlist(), silent = TRUE)
       
-      UL_q[i] <- mlm_df %>%
-        filter(probs >= crit_vals[i, "critval_UL"] %>% unlist()) %>%
-        arrange(t) %>%
-        dplyr::slice(1) %>%
-        dplyr::select(t) %>%
-        unlist()
+      LL_q[i] = ifelse(length(LL_potential) != 0, LL_potential, NA)
+      UL_q[i] = ifelse(length(UL_potential) != 0, UL_potential, NA)
     }
     
     proposed_boot_results <- 
@@ -1041,38 +1043,10 @@ samp.f <- function(samp, A, B_MAR_nA, B_MAR_20nA, B_MNAR_1nA, B_MNAR_20nA, r, po
              est_type = 't') %>%
       dplyr::select(colnames(hatq_varsum))
     
-    hatq_varsum %>%
+    hatq_varsum %<>%
       bind_rows(proposed_boot_results) %>%
       arrange(est_quant)
-      mutate(boot3_LL = hatq - qnorm(1-alp/2)*estvar, boot3_UL =  hatq + qnorm(1-alp/2)*estvar) %>%
       
-      mutate(CR_boot3 = ifelse(pop_quant >= LL & 
-                               pop_quant <= UL , 1, 0)) %>%
-      dplyr::select(nB, miss, perc, hatq, pop_quant, estvar, LL, UL, CR, CR_boot3)#%>%
-      pivot_longer(cols = 7:8, names_to = 'LL_type', values_to = 'LL') %>%
-      dplyr::select(boot2_UL, boot3_UL, everything()) %>%
-      pivot_longer(cols = 1:2, names_to = 'UL_type', values_to = 'UL') %>%
-      dplyr::select(CR_2, CR_3, everything()) %>%
-      pivot_longer(cols = 1:2, names_to = 'CR_type', values_to = 'CR') %>%
-      mutate(LL_type = LL_type %>% gsub(pattern = '_LL', replacement = ''),
-             UL_type = LL_type %>% gsub(pattern = '_UL', replacement = ''),
-             CR_type = CR_type %>% gsub(pattern = 'CR_', replacement = 'boot'),
-             ) %>%
-      arrange(LL_type, UL_type, CR_type)
-      mutate(name = ifelse(name == 'CR_proposed', 'boot_proposed', 'boot_new'))
-    
-    data.frame(
-      boot2_LL = LL_q, boot2_UL = UL_q, pop_quant = q_N
-    )#%>%
-      mutate(CR = ifelse(pop_quant >= boot2_LL & pop_quant <= boot2_UL, 1, 0))
-      mutate(boot_var = ((UL_q - LL_q) / (2 * qnorm(1 - alp / 2)))^2) %>%
-      mutate(name = "hatq", nB = da_nB, miss = da_miss, F_N = F_N) %>%
-      mutate(perc = paste0(F_N * 100, "%")) %>%
-      left_join(hatq_df, by = c("name", "nB", "miss", "perc")) %>%
-      dplyr::select(perc, boot_var, hatq) %>%
-      mutate(LL = hatq - qnorm(1 - alp / 2) * sqrt(boot_var),
-             UL = hatq + qnorm(1 - alp / 2) * sqrt(boot_var))
-
     final <- rbind(mlm_varsum, hatq_varsum) %>%
       dplyr::select(est_type, nB, miss, perc, everything())
     return(final)
@@ -1098,10 +1072,18 @@ for (i in 1:nsim) {
     B_MAR_20nA = Bs_MAR_20nA[[i]],
     B_MNAR_1nA = Bs_MNAR_1nA[[i]],
     B_MNAR_20nA = Bs_MNAR_20nA[[i]],
-    p = p,
-    L = L, seed = seed
+    p = p, seed = seed
   )
-  progress(i, nsim)
+  # in case computer dies, cache every 100 iters
+  if(i%%100 == 0){
+    setwd('/Users/jeremyflood/Library/CloudStorage/OneDrive-Personal/Documents/Grad School/2024-2025/Fall 2025/reCDF/reCDF/Variance Estimation/Data/Cached Iter Files')
+    results[(i-100):100] %>% bind_rows() %>% openxlsx::write.xlsx(
+      paste0('raw_results_iter_',i-100, '_', i, '.xlsx')
+    )
+    progress(i, nsim)
+  } else{
+    progress(i, nsim)
+  }
 }
 
 
@@ -1123,16 +1105,15 @@ mc_results <- cleaned_ddf %>%
 
 cleaned_results <- cleaned_ddf %>%
   # left_join(mc_results) %>%
-  dplyr::select(est_type, est_quant, pop_quant, bootstats, everything()) %>%
+  dplyr::select(est_type, est_quant, pop_quant,everything()) %>%
   pivot_longer(cols = 2) %>%
-  group_by(est_type, perc, miss, nB, var_type, name, bootstats) %>%
+  group_by(est_type, perc, miss, nB, var_type, name) %>%
   dplyr::summarize(
     pop_quant = mean(pop_quant),
     est_value = mean(value),
     est_var = mean(var_val),
     CR = mean(CR),
-    d = mean(UL - LL),
-    boot_mean_val = mean(bootstats_value)
+    d = mean(UL - LL)
   ) %>%
   ungroup() %>%
   left_join(mc_results, by = c("est_type", "perc", "miss", "nB", "var_type")) %>%
@@ -1146,6 +1127,5 @@ final_results <- list(
 
 names(final_results) <- c("raw", "summary")
 
-random_val <- rgamma(n = 1, shape = 500, rate = 2)
-
-openxlsx::write.xlsx(final_results, paste0("modf33_results_", seed, "_", round(random_val, digits = 3) * 1000, "_.xlsx"))
+setwd('/Users/jeremyflood/Library/CloudStorage/OneDrive-Personal/Documents/Grad School/2024-2025/Fall 2025/reCDF/reCDF/Variance Estimation/Data/Final Results')
+openxlsx::write.xlsx(final_results, paste0("modf1_results.xlsx"))
