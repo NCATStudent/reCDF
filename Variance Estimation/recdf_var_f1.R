@@ -78,7 +78,7 @@ require(styler)
 
 
 seed <- 101
-nsim <- 1500
+nsim <- L <- 1500 # if you wish to change L, make sure to also change it in the function below.
 N <- 1e05
 nA <- 1000
 alp <- .10
@@ -915,7 +915,7 @@ samp.f <- function(samp, A, B_MAR_nA, B_MAR_20nA, B_MNAR_1nA, B_MNAR_20nA, r, po
       pivot_longer(cols = 4:ncol(.), names_to = "perc") %>%
       pivot_wider() %>%
       left_join(boot_var %>%
-                  dplyr::select(-c(value_hatq, value_m_lm, value_hatF_hatT)), by = c("nB", "miss", "perc"))
+        dplyr::select(-c(value_hatq, value_m_lm, value_hatF_hatT)), by = c("nB", "miss", "perc"))
 
     # reCDF est variance
     mlm_varsum <-
@@ -996,10 +996,10 @@ samp.f <- function(samp, A, B_MAR_nA, B_MAR_20nA, B_MNAR_1nA, B_MNAR_20nA, r, po
       mutate(CR = ifelse(pop_quant >= LL & pop_quant <= UL, 1, 0)) %>%
       ungroup() %>%
       mutate(est_type = "t")
-    
+
     # new bootstrapped based confidence interval
-   crit_vals <- 
-    boot_var %>%
+    crit_vals <-
+      boot_var %>%
       dplyr::select(nB, miss, perc, boot_var_hatF_hatT) %>%
       mutate(pop_quant = F_N) %>%
       mutate(
@@ -1007,46 +1007,50 @@ samp.f <- function(samp, A, B_MAR_nA, B_MAR_20nA, B_MNAR_1nA, B_MNAR_20nA, r, po
         critval_UL = pop_quant + qnorm(1 - alp / 2) * sqrt(boot_var_hatF_hatT)
       ) %>%
       dplyr::select(critval_LL, critval_UL)
-    
+
     mlm_df <- asymp_var_cdf[[2]]
-    
+
     LL_q <- UL_q <- c()
     for (i in 1:nrow(crit_vals)) {
-      LL_potential =try(mlm_df %>%
-                          filter(probs >= crit_vals[i, "critval_LL"] %>% unlist()) %>%
-                          arrange(t) %>%
-                          dplyr::slice(1) %>%
-                          dplyr::select(t) %>%
-                          unlist(), silent = TRUE)
-      UL_potential = try(mlm_df %>%
-                           filter(probs >= crit_vals[i, "critval_UL"] %>% unlist()) %>%
-                           arrange(t) %>%
-                           dplyr::slice(1) %>%
-                           dplyr::select(t) %>%
-                           unlist(), silent = TRUE)
-      
-      LL_q[i] = ifelse(length(LL_potential) != 0, LL_potential, NA)
-      UL_q[i] = ifelse(length(UL_potential) != 0, UL_potential, NA)
+      LL_potential <- try(mlm_df %>%
+        filter(probs >= crit_vals[i, "critval_LL"] %>% unlist()) %>%
+        arrange(t) %>%
+        dplyr::slice(1) %>%
+        dplyr::select(t) %>%
+        unlist(), silent = TRUE)
+      UL_potential <- try(mlm_df %>%
+        filter(probs >= crit_vals[i, "critval_UL"] %>% unlist()) %>%
+        arrange(t) %>%
+        dplyr::slice(1) %>%
+        dplyr::select(t) %>%
+        unlist(), silent = TRUE)
+
+      LL_q[i] <- ifelse(length(LL_potential) != 0, LL_potential, NA)
+      UL_q[i] <- ifelse(length(UL_potential) != 0, UL_potential, NA)
     }
-    
-    proposed_boot_results <- 
-    actual %>%
+
+    proposed_boot_results <-
+      actual %>%
       filter(name == "hatq") %>%
       dplyr::select(name, nB, miss, everything()) %>%
       pivot_longer(cols = 4:ncol(.), names_to = "perc", values_to = "hatq") %>%
       mutate(LL = LL_q, UL = UL_q) %>%
       mutate(pop_quant = q_N) %>%
-      mutate(CR = ifelse(pop_quant >= LL & pop_quant <= UL, 1, 0),
-             var_val =  ((UL - LL) / (2 * qnorm(1 - (alp / 2))))^2) %>%
-      mutate(est_quant = hatq,
-             var_type = 'boot2',
-             est_type = 't') %>%
+      mutate(
+        CR = ifelse(pop_quant >= LL & pop_quant <= UL, 1, 0),
+        var_val = ((UL - LL) / (2 * qnorm(1 - (alp / 2))))^2
+      ) %>%
+      mutate(
+        est_quant = hatq,
+        var_type = "boot2",
+        est_type = "t"
+      ) %>%
       dplyr::select(colnames(hatq_varsum))
-    
+
     hatq_varsum %<>%
       bind_rows(proposed_boot_results) %>%
       arrange(est_quant)
-      
+
     final <- rbind(mlm_varsum, hatq_varsum) %>%
       dplyr::select(est_type, nB, miss, perc, everything())
     return(final)
@@ -1075,18 +1079,18 @@ for (i in 1:nsim) {
     p = p, seed = seed
   )
   # in case computer dies, cache every 100 iters
-  if(i%%100 == 0){
-    setwd('/Users/jeremyflood/Library/CloudStorage/OneDrive-Personal/Documents/Grad School/2024-2025/Fall 2025/reCDF/reCDF/Variance Estimation/Data/Cached Iter Files')
-    results[(i-100):100] %>% bind_rows() %>% openxlsx::write.xlsx(
-      paste0('f1_raw_results_iter_',i-100, '_', i, '.xlsx')
-    )
+  if (i %% 100 == 0) {
+    setwd("/Users/jeremyflood/Library/CloudStorage/OneDrive-Personal/Documents/Grad School/2024-2025/Fall 2025/reCDF/reCDF/Variance Estimation/Data/Cached Iter Files")
+    results[(i - 100):100] %>%
+      bind_rows() %>%
+      openxlsx::write.xlsx(
+        paste0("f1_raw_results_iter_", i - 100, "_", i, ".xlsx")
+      )
     progress(i, nsim)
-  } else{
+  } else {
     progress(i, nsim)
   }
 }
-
-
 
 cleaned_ddf <- results %>%
   bind_rows() # %>%
@@ -1105,7 +1109,7 @@ mc_results <- cleaned_ddf %>%
 
 cleaned_results <- cleaned_ddf %>%
   # left_join(mc_results) %>%
-  dplyr::select(est_type, est_quant, pop_quant,everything()) %>%
+  dplyr::select(est_type, est_quant, pop_quant, everything()) %>%
   pivot_longer(cols = 2) %>%
   group_by(est_type, perc, miss, nB, var_type, name) %>%
   dplyr::summarize(
@@ -1127,5 +1131,5 @@ final_results <- list(
 
 names(final_results) <- c("raw", "summary")
 
-setwd('/Users/jeremyflood/Library/CloudStorage/OneDrive-Personal/Documents/Grad School/2024-2025/Fall 2025/reCDF/reCDF/Variance Estimation/Data/Final Results')
+setwd("/Users/jeremyflood/Library/CloudStorage/OneDrive-Personal/Documents/Grad School/2024-2025/Fall 2025/reCDF/reCDF/Variance Estimation/Data/Final Results")
 openxlsx::write.xlsx(final_results, paste0("modf1_results.xlsx"))
