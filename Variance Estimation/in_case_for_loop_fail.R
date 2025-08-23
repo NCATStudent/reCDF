@@ -1,0 +1,61 @@
+# did your for-loop fail? use this script to help clean up results
+
+setwd('/Users/jeremyflood/Library/CloudStorage/OneDrive-Personal/Documents/Grad School/2024-2025/Fall 2025/reCDF/reCDF/Variance Estimation/Data/Cached Iter Files')
+
+
+# getting f1 data
+
+setwd('/Users/jeremyflood/Library/CloudStorage/OneDrive-Personal/Documents/Grad School/2024-2025/Fall 2025/reCDF/reCDF/Variance Estimation/Data/Cached Iter Files/f1_results')
+all_files = list.files('/Users/jeremyflood/Library/CloudStorage/OneDrive-Personal/Documents/Grad School/2024-2025/Fall 2025/reCDF/reCDF/Variance Estimation/Data/Cached Iter Files/f1_results')
+
+f1_agg = c()
+for(i in 1:length(all_files)){
+  f1_agg[[i]] = openxlsx::read.xlsx(all_files[i]) %>% mutate(mod = 'f1')
+  print(paste0('completed ', round(i/length(all_files) * 100, 0)))
+}
+
+setwd('/Users/jeremyflood/Library/CloudStorage/OneDrive-Personal/Documents/Grad School/2024-2025/Fall 2025/reCDF/reCDF/Variance Estimation/Data/Cached Iter Files/f3_results')
+all_files_f3 = list.files('/Users/jeremyflood/Library/CloudStorage/OneDrive-Personal/Documents/Grad School/2024-2025/Fall 2025/reCDF/reCDF/Variance Estimation/Data/Cached Iter Files/f3_results')
+
+f3_agg = c()
+for(i in 1:length(all_files_f3)){
+  f3_agg[[i]] = openxlsx::read.xlsx(all_files_f3[i]) %>% mutate(mod = 'f3')
+  print(paste0('completed ', round(i/length(all_files_f3) * 100, 0)))
+}
+
+cleaned_ddf = rbind(
+f1_agg %>% bind_rows(),
+f3_agg %>% bind_rows()
+)
+
+
+mc_results <- cleaned_ddf %>%
+  # filter(var_name == 'asymp') %>%
+  group_by(mod, perc, miss, nB, est_type, var_type) %>%
+  dplyr::summarize(MC_var = var(est_quant))
+
+
+cleaned_results <- 
+cleaned_ddf %>%
+  # left_join(mc_results) %>%
+  dplyr::select(est_type, est_quant, pop_quant, everything()) %>%
+  pivot_longer(cols = 2) %>%
+  group_by(mod, est_type, perc, miss, nB, var_type, name) %>%
+  dplyr::summarize(
+    pop_quant = mean(pop_quant),
+    est_value = mean(value),
+    est_var = mean(var_val),
+    CR = mean(CR),
+    d = mean(UL - LL)
+  ) %>%
+  ungroup() %>%
+  left_join(mc_results, by = c("est_type", "perc", "miss", "nB", "var_type", "mod")) %>%
+  mutate(rb = ((MC_var - est_var) / MC_var) * 100) %>%
+  mutate(nsim = 1500, L = 1500)
+
+final_results <- list(
+  cleaned_ddf,
+  cleaned_results
+)
+
+openxlsx::write.xlsx(final_results, paste0("modf3_results.xlsx"))

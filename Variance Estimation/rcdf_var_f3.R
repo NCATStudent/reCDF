@@ -1114,11 +1114,11 @@ cleaned_results <- cleaned_ddf %>%
   pivot_longer(cols = 2) %>%
   group_by(est_type, perc, miss, nB, var_type, name) %>%
   dplyr::summarize(
-    pop_quant = mean(pop_quant),
-    est_value = mean(value),
-    est_var = mean(var_val),
-    CR = mean(CR),
-    d = mean(UL - LL)
+    pop_quant = mean(pop_quant, na.rm = TRUE),
+    est_value = mean(value, na.rm= TRUE),
+    est_var = mean(var_val, na.rm = TRUE),
+    CR = mean(CR, na.rm = TRUE),
+    d = mean(UL - LL, na.rm = TRUE)
   ) %>%
   ungroup() %>%
   left_join(mc_results, by = c("est_type", "perc", "miss", "nB", "var_type")) %>%
