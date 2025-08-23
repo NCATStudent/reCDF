@@ -123,35 +123,35 @@ sim.f2 <- function(N,
   } else {
     stop("You must select one of the following models: (f1, f2, f3, f4)")
   }
-
-
+  
+  
   pop <- as.data.frame(cbind(X, y))
-
-
+  
+  
   # population characteristics
   mu <- mean(pop$y)
   F_N <- c(.01, .10, .25, .50, .75, .90, .99)
   q <- quantile(pop$y, probs = F_N, type = 1)
-
-
+  
+  
   # sampling function
   B_generator <- function(miss, nB, r) {
     sizes_rounded <- round(c(r * nB, (1 - r) * nB),
-      digits = 0
+                           digits = 0
     )
-
+    
     sizes <- ifelse(sizes_rounded < 1, 1, sizes_rounded)
     if (miss == "MAR") {
       strat <- paste0("x", c(abs(cor(X, y)) %>% which.max()))
       pop_restrat <- pop %>%
         mutate(restrat = ifelse(get(strat) <= median(get(strat)), 1,
-          2
+                                2
         )) %>%
         arrange(restrat)
       s.B <- sampling::strata(pop_restrat,
-        stratanames = "restrat",
-        size = sizes,
-        method = "srswor"
+                              stratanames = "restrat",
+                              size = sizes,
+                              method = "srswor"
       )
       B <- getdata(pop_restrat, s.B)
     } else if (miss == "MNAR") {
@@ -159,9 +159,9 @@ sim.f2 <- function(N,
         mutate(mnar_strat = ifelse(y < median(y), "0", "1") %>% as.factor()) %>%
         arrange(mnar_strat)
       s.B <- sampling::strata(pop_restrat,
-        stratanames = "mnar_strat",
-        size = sizes,
-        method = "srswor"
+                              stratanames = "mnar_strat",
+                              size = sizes,
+                              method = "srswor"
       )
       B <- getdata(pop_restrat, s.B)
     }
@@ -179,43 +179,43 @@ sim.f2 <- function(N,
     ecdf_A <- ecdf(A$y)
     A_plug <- ecdf_A(q)
     names(A_plug) <- names(q)
-
+    
     # naive estimator
     ecdf_B <- ecdf(B$y)
     B_plug <- ecdf_B(q)
     names(B_plug) <- names(q)
-
+    
     # lmod
     lm_B <- lm(y ~ .,
-      data = B[, c(
-        paste0("x", 1:p),
-        "y"
-      )]
+               data = B[, c(
+                 paste0("x", 1:p),
+                 "y"
+               )]
     )
     lm_pred_B <- predict(lm_B, newdata = B)
     lm_pred_A <- predict(lm_B, newdata = A)
-
-
+    
+    
     ## plug in
     ecdf_lm <- ecdf(lm_pred_A)
     lm_plug <- ecdf_lm(q)
     names(lm_plug) <- names(q)
-
-
-
+    
+    
+    
     # reCDF
     v_lm <- B$y - lm_pred_B
     e_ecdf <- ecdf(v_lm)
-
+    
     m_lm <- c()
-
+    
     for (i in 1:length(q)) {
       m_lm[i] <- e_ecdf(q[i] - lm_pred_A) %>% mean()
     }
-
+    
     names(m_lm) <- names(q)
-
-
+    
+    
     final_cdf <- rbind(
       F_N,
       A_plug,
@@ -226,78 +226,78 @@ sim.f2 <- function(N,
       as.data.frame() %>%
       rownames_to_column("name") %>%
       mutate(group = "cdf")
-
-
+    
+    
     # Quantile Estimation
-
+    
     ## A
     A_df <- data.frame(
       probs = ecdf_A(A$y),
       t = A$y
     ) %>%
       arrange(probs)
-
+    
     # B
     B_df <- data.frame(
       probs = ecdf_B(B$y),
       t = B$y
     ) %>%
       arrange(probs)
-
-
+    
+    
     # P
     plm_df <- data.frame(
       probs = ecdf_lm(lm_pred_A),
       t = lm_pred_A
     ) %>%
       arrange(probs)
-
-
+    
+    
     # R
     q_mlm <- function(a, b, e_ecdf = e_ecdf) {
       return(e_ecdf(a - b) %>% mean())
     }
-
+    
     vq <- Vectorize(q_mlm,
-      vectorize.args = "a"
+                    vectorize.args = "a"
     )
-
+    
     mlm_df <- data.frame(
       probs = vq(lm_pred_A, lm_pred_A, e_ecdf = e_ecdf),
       t = lm_pred_A
     ) %>%
       arrange(probs)
-
+    
     ie_fun <- function(dats, a) {
       return(dats %>%
-        lapply(dplyr::filter, probs >= a) %>%
-        lapply(function(x) {
-          if (nrow(x) == 0) {
-            data.frame(
-              probs = NA,
-              t = NA
-            )
-          } else {
-            x
-          }
-        }) %>%
-        lapply(setNames, c("probs", "t")) %>%
-        lapply(dplyr::arrange, t) %>%
-        lapply(dplyr::slice, 1) %>%
-        lapply(dplyr::select, -probs) %>%
-        bind_rows() %>%
-        mutate(
-          name = c(
-            "A_plug",
-            "B_plug",
-            "lm_plug",
-            "m_lm"
-          ) %>% as.factor(),
-          a = a
-        ) %>%
-        dplyr::select(a, name, t))
+               lapply(dplyr::filter, probs >= a) %>%
+               lapply(function(x) {
+                 if (nrow(x) == 0) {
+                   data.frame(
+                     probs = NA,
+                     t = NA
+                   )
+                 } else {
+                   x
+                 }
+               }) %>%
+               lapply(setNames, c("probs", "t")) %>%
+               lapply(dplyr::arrange, t) %>%
+               lapply(dplyr::slice, 1) %>%
+               lapply(dplyr::select, -probs) %>%
+               bind_rows() %>%
+               mutate(
+                 name = c(
+                   "A_plug",
+                   "B_plug",
+                   "lm_plug",
+                   "m_lm"
+                 ) %>% as.factor(),
+                 a = a
+               ) %>%
+               dplyr::select(a, name, t))
     }
-
+    
     ie_result <- mapply(
       FUN = ie_fun,
       a = F_N,
@@ -309,7 +309,7 @@ sim.f2 <- function(N,
       )),
       SIMPLIFY = FALSE
     )
-
+    
     final_quant <-
       ie_result %>%
       bind_rows() %>%
@@ -321,18 +321,18 @@ sim.f2 <- function(N,
       ) %>%
       mutate(group = "q") %>%
       as.data.frame()
-
+    
     # pool results together
-
+    
     final_df <- rbind(
       final_cdf,
       final_quant
     ) %>%
       as.data.frame()
-
+    
     return(final_df)
   }
-
+  
   samp.fours <- function(samp, nB, r, pop, p, nA) {
     B_MAR <- B_generator(
       miss = "MAR", nB = nB, r = r
@@ -340,12 +340,12 @@ sim.f2 <- function(N,
     B_MNAR <- B_generator(
       miss = "MNAR", nB = nB, r = r
     )
-
-
+    
+    
     cdf_MAR <- MI_cdf(B = B_MAR, A = A, p = p)
     cdf_MNAR <- MI_cdf(B = B_MNAR, A = A, p = p)
-
-
+    
+    
     MC_results <- rbind(
       cdf_MAR,
       cdf_MNAR
@@ -354,16 +354,16 @@ sim.f2 <- function(N,
       mutate(
         nB = nB, nA = nA, nsim = nsim, r = r, mod = mod # to track errors
       )
-
+    
     return(MC_results)
   }
-
+  
   # parallel processing
   iter <- 1:nsim
   numbcores <- detectCores()
   RNGkind("L'Ecuyer-CMRG")
   set.seed(seed)
-
+  
   results_r_nB <- c()
   for (i in 1:length(nB)) {
     results_r_nB[[i]] <- pbmclapply(
@@ -377,10 +377,10 @@ sim.f2 <- function(N,
     )
     progress(i, length(nB))
   }
-
+  
   results <- results_r_nB %>% bind_rows()
-
-
+  
+  
   results_just_A <-
     results %>%
     bind_rows(.id = "iter") %>%
@@ -410,7 +410,7 @@ sim.f2 <- function(N,
     ) %>%
     dplyr::select(-est) %>%
     ungroup()
-
+  
   results_not_A <-
     results %>%
     bind_rows(.id = "iter") %>%
@@ -441,11 +441,11 @@ sim.f2 <- function(N,
       var = var(value, na.rm = TRUE)
     ) %>%
     ungroup()
-
-
+  
+  
   perf_results <- results_just_A %>%
     left_join(results_not_A,
-      by = c("nB", "r", "perc", "group", "miss")
+              by = c("nB", "r", "perc", "group", "miss")
     ) %>%
     mutate(
       rrmse = rmse / rmse_A,
@@ -455,8 +455,8 @@ sim.f2 <- function(N,
     dplyr::select(nB, r, group, miss, perc, est, rrmse, rbias, rvar) %>%
     arrange(group) %>%
     mutate(mod = mod)
-
-
+  
+  
   return(list(results, perf_results))
 }
 
@@ -466,10 +466,10 @@ N <- 100000
 nA <- .01 * N
 nB <- c(nA / N, .10, .20) * N
 seed <- 101
-r <- .30
+r <- .15
 
 
-setwd("/Users/jeremyflood/Library/CloudStorage/OneDrive-Personal/Documents/Grad School/2024-2025/Fall 2025/reCDF/reCDF/Monte-Carlo Runs/r_30")
+setwd("/Users/jeremyflood/Library/CloudStorage/OneDrive-Personal/Documents/Grad School/2024-2025/Fall 2025/reCDF/reCDF/Monte-Carlo Runs/r_15")
 
 # f1
 mod <- "f1"
@@ -535,7 +535,7 @@ f4_model %>%
   setNames(c("raw", "perf")) %>%
   openxlsx::write.xlsx("modf4_results.xlsx")
 
-setwd("/Users/jeremyflood/Library/CloudStorage/OneDrive-Personal/Documents/Grad School/2024-2025/Fall 2025/reCDF/reCDF/Monte-Carlo Runs/r_30")
+setwd("/Users/jeremyflood/Library/CloudStorage/OneDrive-Personal/Documents/Grad School/2024-2025/Fall 2025/reCDF/reCDF/Monte-Carlo Runs/r_15")
 
 mod_list <- paste0("modf", 1:4, "_results.xlsx")
 
@@ -568,29 +568,29 @@ for (i in 1:length(nB)) {
     dplyr::select(nB, mod, miss, perc, new_est, est, group, rrmse) %>%
     mutate(est = factor(est, labels = c("B_plug" = "Naive", "lm_plug" = "Plug-in", "m_lm" = "Residual eCDF"))) %>%
     mutate(mod = factor(mod,
-      labels = c(
-        "f1" = TeX("Model $\\xi_{1}"),
-        "f2" = TeX("Model $\\xi_{2}"),
-        "f3" = TeX("Model $\\xi_{3}"),
-        "f4" = TeX("Model $\\xi_{4}")
-      )
+                        labels = c(
+                          "f1" = TeX("Model $\\xi_{1}"),
+                          "f2" = TeX("Model $\\xi_{2}"),
+                          "f3" = TeX("Model $\\xi_{3}"),
+                          "f4" = TeX("Model $\\xi_{4}")
+                        )
     )) %>%
     mutate(cat_est = ifelse(new_est %in% c("B_plug_cdf", "lm_plug_cdf", "m_lm_cdf"),
-      "F(t)", "t(a)"
+                            "F(t)", "t(a)"
     )) %>%
     mutate(new_est = factor(new_est,
-      levels = c(
-        "B_plug_cdf", "lm_plug_cdf", "m_lm_cdf",
-        "B_plug_q", "lm_plug_q", "m_lm_q"
-      ),
-      labels = c(
-        "B_plug_cdf" = TeX("$\\hat{F}_{B}$"),
-        "lm_plug_cdf" = TeX("$\\hat{F}_{P}"),
-        "m_lm_cdf" = TeX("$\\hat{F}_{R}"),
-        "B_plug_q" = TeX("$\\hat{t}_{B}"),
-        "lm_plug_q" = TeX("$\\hat{t}_{P}"),
-        "m_lm_q" = TeX("$\\hat{t}_{R}")
-      )
+                            levels = c(
+                              "B_plug_cdf", "lm_plug_cdf", "m_lm_cdf",
+                              "B_plug_q", "lm_plug_q", "m_lm_q"
+                            ),
+                            labels = c(
+                              "B_plug_cdf" = TeX("$\\hat{F}_{B}$"),
+                              "lm_plug_cdf" = TeX("$\\hat{F}_{P}"),
+                              "m_lm_cdf" = TeX("$\\hat{F}_{R}"),
+                              "B_plug_q" = TeX("$\\hat{t}_{B}"),
+                              "lm_plug_q" = TeX("$\\hat{t}_{P}"),
+                              "m_lm_q" = TeX("$\\hat{t}_{R}")
+                            )
     )) %>%
     # mutate(nB = factor(nB,
     #                    labels = c('1000' = TeX("$n_B = n_A$"),
@@ -624,11 +624,11 @@ for (i in 1:length(nB)) {
     ) +
     theme(legend.position = "top") +
     ggtitle(ifelse(nB[i] == nA, TeX("\\sqrt{RMSER} for $n_{B} = n_{A}$"),
-      TeX(paste0("\\sqrt{RMSER} for $n_{B} =") %>% paste0(nB[i] / nA) %>% paste0("nA$"))
+                   TeX(paste0("\\sqrt{RMSER} for $n_{B} =") %>% paste0(nB[i] / nA) %>% paste0("nA$"))
     )) +
     labs(colour = NULL)
 }
-setwd("/Users/jeremyflood/Library/CloudStorage/OneDrive-Personal/Documents/Grad School/2024-2025/Fall 2025/reCDF/reCDF/Monte-Carlo Runs/r_30/Plots")
+setwd("/Users/jeremyflood/Library/CloudStorage/OneDrive-Personal/Documents/Grad School/2024-2025/Fall 2025/reCDF/reCDF/Monte-Carlo Runs/r_15/Plots")
 
 ggsave("RRMSE_nB_1.png", plots_together[[1]], dpi = 400, width = 10, height = 8)
 ggsave("RRMSE_nB_2.png", plots_together[[2]], dpi = 400, width = 10, height = 8)
