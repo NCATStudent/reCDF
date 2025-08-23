@@ -623,8 +623,8 @@ for (i in 1:length(nB)) {
       axis.text.x = element_text(angle = 90, hjust = 1)
     ) +
     theme(legend.position = "top") +
-    ggtitle(ifelse(nB[i] == nA, TeX("\\sqrt{RMSER} for $n_{B} = n_{A}$"),
-      TeX(paste0("\\sqrt{RMSER} for $n_{B} =") %>% paste0(nB[i] / nA) %>% paste0("nA$"))
+    ggtitle(ifelse(nB[i] == nA, TeX(paste0("\\sqrt{RMSER} for $n_{B} = n_{A}$, r = ", r)),
+      TeX(paste0("\\sqrt{RMSER} for $n_{B} =") %>% paste0(nB[i] / nA) %>% paste0("nA$") %>% paste0(', r =', r))
     )) +
     labs(colour = NULL)
 }
