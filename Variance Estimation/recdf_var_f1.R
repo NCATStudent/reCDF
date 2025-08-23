@@ -1083,6 +1083,7 @@ for (i in 1:nsim) {
     setwd("/Users/jeremyflood/Library/CloudStorage/OneDrive-Personal/Documents/Grad School/2024-2025/Fall 2025/reCDF/reCDF/Variance Estimation/Data/Cached Iter Files")
     results[(i - 100):100] %>%
       bind_rows() %>%
+      mutate(mod = mod) %>%
       openxlsx::write.xlsx(
         paste0("f1_raw_results_iter_", i - 100, "_", i, ".xlsx")
       )
