@@ -167,7 +167,7 @@ sim.f2 <- function(N,
     }
     return(B)
   }
-  #B = B_generator('MNAR', nB, r)
+  # B = B_generator('MNAR', nB, r)
   MI_cdf <- function(B, A, p) {
     # A
     s.A <- sample(1:N, nA, replace = FALSE)
@@ -559,9 +559,10 @@ est_label <- c(
 plots_together <- c()
 
 for (i in 1:length(nB)) {
+  nBs <- nB[i]
   plots_together[[i]] <- dat_together %>%
     bind_rows() %>%
-    filter(nB == nB[i]) %>%
+    filter(nB == nBs) %>%
     # filter(est != 'B_plug') %>%
     # filter(miss == 'MAR') %>%
     mutate(new_est = paste0(est, "_", group)) %>%
@@ -623,8 +624,8 @@ for (i in 1:length(nB)) {
       axis.text.x = element_text(angle = 90, hjust = 1)
     ) +
     theme(legend.position = "top") +
-    ggtitle(ifelse(nB[i] == nA, TeX(paste0("\\sqrt{RMSER} for $n_{B} = n_{A}$, r = ", r)),
-      TeX(paste0("\\sqrt{RMSER} for $n_{B} =") %>% paste0(nB[i] / nA) %>% paste0("nA$") %>% paste0(', r =', r))
+    ggtitle(ifelse(nBs == nA, TeX(paste0("\\sqrt{RMSER} for $n_{B} = n_{A}$, r = ", r)),
+      TeX(paste0("\\sqrt{RMSER} for $n_{B} =") %>% paste0(nBs / nA) %>% paste0("nA$") %>% paste0(", r =", r))
     )) +
     labs(colour = NULL)
 }
@@ -633,5 +634,3 @@ setwd("/Users/jeremyflood/Library/CloudStorage/OneDrive-Personal/Documents/Grad 
 ggsave("RRMSE_nB_1.png", plots_together[[1]], dpi = 400, width = 10, height = 8)
 ggsave("RRMSE_nB_2.png", plots_together[[2]], dpi = 400, width = 10, height = 8)
 ggsave("RRMSE_nB_3.png", plots_together[[3]], dpi = 400, width = 10, height = 8)
-
-
