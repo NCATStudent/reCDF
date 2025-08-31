@@ -469,7 +469,7 @@ sim.f2 <- function(N,
 nsim <- 1500
 N <- 100000
 nA <- .01 * N
-nB <- c(100 / N, .01, .10, .20) * N
+nB <- c(100 / N, .01, .10, .20, .40) * N
 seed <- 101
 r <- .15
 
@@ -540,7 +540,7 @@ f4_model %>%
   setNames(c("raw", "perf")) %>%
   openxlsx::write.xlsx("modf4_results.xlsx")
 
-setwd("/Users/jeremyflood/Library/CloudStorage/OneDrive-Personal/Documents/Grad School/2024-2025/Fall 2025/reCDF/reCDF/Monte-Carlo Runs/Model Diagnostics/Small nB/Plots")
+setwd("/Users/jeremyflood/Library/CloudStorage/OneDrive-Personal/Documents/Grad School/2024-2025/Fall 2025/reCDF/reCDF/Monte-Carlo Runs/Model Diagnostics/Small nB/")
 
 mod_list <- paste0("modf", 1:4, "_results.xlsx")
 
@@ -564,9 +564,10 @@ est_label <- c(
 plots_together <- c()
 
 for (i in 1:length(nB)) {
+  nBs = nB[i]
   plots_together[[i]] <- dat_together %>%
     bind_rows() %>%
-    filter(nB == nB[i]) %>%
+    filter(nB == nBs) %>%
     # filter(est != 'B_plug') %>%
     # filter(miss == 'MAR') %>%
     mutate(new_est = paste0(est, "_", group)) %>%
@@ -628,8 +629,8 @@ for (i in 1:length(nB)) {
       axis.text.x = element_text(angle = 90, hjust = 1)
     ) +
     theme(legend.position = "top") +
-    ggtitle(ifelse(nB[i] == nA, TeX(paste0("\\sqrt{RMSER} for $n_{B} = n_{A}$, r = ", r)),
-      TeX(paste0("\\sqrt{RMSER} for $n_{B} =") %>% paste0(nB[i] / nA) %>% paste0("nA$") %>% paste0(", r =", r))
+    ggtitle(ifelse(nBs == nA, TeX(paste0("\\sqrt{RMSER} for $n_{B} = n_{A}$, r = ", r)),
+      TeX(paste0("\\sqrt{RMSER} for $n_{B} =") %>% paste0(nBs / nA) %>% paste0("nA$") %>% paste0(", r =", r))
     )) +
     labs(colour = NULL)
 }
