@@ -464,7 +464,7 @@ sim.f2 <- function(N,
 nsim <- 1500
 N <- 100000
 nA <- .01 * N
-nB <- c(100/N, nA / N, .10, .20, .40) * N
+nB <- c(100 / N, nA / N, .10, .20, .40) * N
 seed <- 101
 r <- .15
 
@@ -557,7 +557,7 @@ est_label <- c(
 
 
 plots_together <- c()
-
+nB <- c(100, 1000, 10000, 20000)
 for (i in 1:length(nB)) {
   nBs <- nB[i] # needed bc R's dumbass can't do a fucking filter condition correctly.
   plots_together[[i]] <- dat_together %>%
@@ -577,7 +577,7 @@ for (i in 1:length(nB)) {
       )
     )) %>%
     mutate(cat_est = ifelse(new_est %in% c("B_plug_cdf", "lm_plug_cdf", "m_lm_cdf"),
-      "F(t)", "t(a)"
+      "F(t)", "T(a)"
     )) %>%
     mutate(new_est = factor(new_est,
       levels = c(
@@ -588,9 +588,9 @@ for (i in 1:length(nB)) {
         "B_plug_cdf" = TeX("$\\hat{F}_{B}$"),
         "lm_plug_cdf" = TeX("$\\hat{F}_{P}"),
         "m_lm_cdf" = TeX("$\\hat{F}_{R}"),
-        "B_plug_q" = TeX("$\\hat{t}_{B}"),
-        "lm_plug_q" = TeX("$\\hat{t}_{P}"),
-        "m_lm_q" = TeX("$\\hat{t}_{R}")
+        "B_plug_q" = TeX("$\\hat{T}_{B}"),
+        "lm_plug_q" = TeX("$\\hat{T}_{P}"),
+        "m_lm_q" = TeX("$\\hat{T}_{R}")
       )
     )) %>%
     # mutate(nB = factor(nB,
@@ -624,9 +624,7 @@ for (i in 1:length(nB)) {
       axis.text.x = element_text(angle = 90, hjust = 1)
     ) +
     theme(legend.position = "top") +
-    ggtitle(ifelse(nBs == nA, TeX(paste0("\\sqrt{RMSER} for $n_{B} = n_{A}$")),
-      TeX(paste0("\\sqrt{RMSER} for $n_{B} =") %>% paste0(nBs / nA) %>% paste0("nA$") %>% paste0(", r =", r))
-    )) +
+    ggtitle(TeX(paste0("\\sqrt{RMSER} for $n_{B} =$", prettyNum(nBs, big.mark = ",")))) +
     labs(colour = NULL)
 }
 setwd("/Users/jeremyflood/Library/CloudStorage/OneDrive-Personal/Documents/Grad School/2024-2025/Fall 2025/reCDF/reCDF/Monte-Carlo Runs/r_15/Plots")
@@ -635,4 +633,3 @@ ggsave("RRMSE_nB_1.png", plots_together[[1]], dpi = 400, width = 10, height = 8)
 ggsave("RRMSE_nB_2.png", plots_together[[2]], dpi = 400, width = 10, height = 8)
 ggsave("RRMSE_nB_3.png", plots_together[[3]], dpi = 400, width = 10, height = 8)
 ggsave("RRMSE_nB_4.png", plots_together[[4]], dpi = 400, width = 10, height = 8)
-ggsave("RRMSE_nB_5.png", plots_together[[5]], dpi = 400, width = 10, height = 8)
