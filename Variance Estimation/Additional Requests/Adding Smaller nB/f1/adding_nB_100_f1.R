@@ -791,7 +791,7 @@ samp.f <- function(samp, A, B_MAR_nA, B_MNAR_1nA, r, pop, p, miss, L = 1500, mc_
     mc.cores = mc_cores,
     SIMPLIFY = FALSE
   )
-  
+
   results2 <- list(
     results.MAR_1nA %>% bind_rows() %>% mutate(nB = 100, miss = "MAR"),
     results.MNAR_1nA %>% bind_rows() %>% mutate(nB = 100, miss = "MNAR")
@@ -800,7 +800,7 @@ samp.f <- function(samp, A, B_MAR_nA, B_MNAR_1nA, r, pop, p, miss, L = 1500, mc_
 
 
   # Testing
-  #B_perm = Bs_MAR_1nA[[1]]
+  # B_perm = Bs_MAR_1nA[[1]]
   var_calcs <- function(A_perm, B_perm, L, alp, da_miss, da_nB) {
     asymp_var_cdf <- var_cdf(
       A = A_perm,
@@ -1030,7 +1030,7 @@ for (i in 1:nsim) {
   )
   # in case computer dies, cache every 100 iters
   if (i %% 100 == 0) {
-    setwd("/Users/jeremyflood/Library/CloudStorage/OneDrive-Personal/Documents/Grad School/2024-2025/Fall 2025/reCDF/reCDF/Variance Estimation/Data/Cached Iter Files")
+    setwd("/Users/jeremyflood/Library/CloudStorage/OneDrive-Personal/Documents/Grad School/2024-2025/Fall 2025/reCDF/reCDF/Variance Estimation/Additional Requests/Adding Smaller nB/f1/Cached Iter Files")
     results[(i - 100):100] %>%
       bind_rows() %>%
       mutate(mod = mod) %>%
@@ -1044,28 +1044,20 @@ for (i in 1:nsim) {
 }
 
 cleaned_ddf <- results %>%
-  bind_rows() # %>%
-# mutate(var_name = var_type) %>%
-# dplyr::select(-var_type) #%>%
-# mutate(est_name= ifelse(is.na(m_lm) == is.na(F_N) & is.na(F_N) == TRUE, 't', 'cdf'),
-#        est_value = ifelse(est_name == 'cdf', m_lm, hatq),
-#        actual_value = ifelse(est_name == 'cdf', F_N, q_N)) %>%
-# dplyr::select(F_N, q_N, hatq, m_lm, everything())
+  bind_rows()
 
 mc_results <- cleaned_ddf %>%
-  # filter(var_name == 'asymp') %>%
   group_by(perc, miss, nB, est_type, var_type) %>%
   dplyr::summarize(MC_var = var(est_quant))
 
 
 cleaned_results <- cleaned_ddf %>%
-  # left_join(mc_results) %>%
   dplyr::select(est_type, est_quant, pop_quant, everything()) %>%
   pivot_longer(cols = 2) %>%
   group_by(est_type, perc, miss, nB, var_type, name) %>%
   dplyr::summarize(
     pop_quant = mean(pop_quant, na.rm = TRUE),
-    est_value = mean(value, na.rm= TRUE),
+    est_value = mean(value, na.rm = TRUE),
     est_var = mean(var_val, na.rm = TRUE),
     CR = mean(CR, na.rm = TRUE),
     d = mean(UL - LL, na.rm = TRUE)
@@ -1082,5 +1074,5 @@ final_results <- list(
 
 names(final_results) <- c("raw", "summary")
 
-setwd("/Users/jeremyflood/Library/CloudStorage/OneDrive-Personal/Documents/Grad School/2024-2025/Fall 2025/reCDF/reCDF/Variance Estimation/Data/Final Results")
+setwd("/Users/jeremyflood/Library/CloudStorage/OneDrive-Personal/Documents/Grad School/2024-2025/Fall 2025/reCDF/reCDF/Variance Estimation/Additional Requests/Adding Smaller nB/f1/Plots")
 openxlsx::write.xlsx(final_results, paste0("modf1_results.xlsx"))
