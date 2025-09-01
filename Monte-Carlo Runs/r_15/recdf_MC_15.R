@@ -464,7 +464,7 @@ sim.f2 <- function(N,
 nsim <- 1500
 N <- 100000
 nA <- .01 * N
-nB <- c(nA / N, .10, .20) * N
+nB <- c(100/N, nA / N, .10, .20, .40) * N
 seed <- 101
 r <- .15
 
@@ -624,7 +624,7 @@ for (i in 1:length(nB)) {
       axis.text.x = element_text(angle = 90, hjust = 1)
     ) +
     theme(legend.position = "top") +
-    ggtitle(ifelse(nBs == nA, TeX(paste0("\\sqrt{RMSER} for $n_{B} = n_{A}$, r = ", r)),
+    ggtitle(ifelse(nBs == nA, TeX(paste0("\\sqrt{RMSER} for $n_{B} = n_{A}$")),
       TeX(paste0("\\sqrt{RMSER} for $n_{B} =") %>% paste0(nBs / nA) %>% paste0("nA$") %>% paste0(", r =", r))
     )) +
     labs(colour = NULL)
@@ -634,3 +634,5 @@ setwd("/Users/jeremyflood/Library/CloudStorage/OneDrive-Personal/Documents/Grad 
 ggsave("RRMSE_nB_1.png", plots_together[[1]], dpi = 400, width = 10, height = 8)
 ggsave("RRMSE_nB_2.png", plots_together[[2]], dpi = 400, width = 10, height = 8)
 ggsave("RRMSE_nB_3.png", plots_together[[3]], dpi = 400, width = 10, height = 8)
+ggsave("RRMSE_nB_4.png", plots_together[[4]], dpi = 400, width = 10, height = 8)
+ggsave("RRMSE_nB_5.png", plots_together[[5]], dpi = 400, width = 10, height = 8)
