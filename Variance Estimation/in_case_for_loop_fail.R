@@ -4,18 +4,20 @@ setwd("/Users/jeremyflood/Library/CloudStorage/OneDrive-Personal/Documents/Grad 
 
 
 # getting f1 data
-
-setwd("/Users/jeremyflood/Library/CloudStorage/OneDrive-Personal/Documents/Grad School/2024-2025/Fall 2025/reCDF/reCDF/Variance Estimation/Data/Cached Iter Files/f1_results")
-all_files <- list.files("/Users/jeremyflood/Library/CloudStorage/OneDrive-Personal/Documents/Grad School/2024-2025/Fall 2025/reCDF/reCDF/Variance Estimation/Data/Cached Iter Files/f1_results")
+f1_path <- "/Users/jeremyflood/Library/CloudStorage/OneDrive-Personal/Documents/Grad School/2024-2025/Fall 2025/reCDF/reCDF/Variance Estimation/Additional Requests/Adding Smaller nB/f1/Cached Iter Files"
+setwd(f1_path)
+all_files <- list.files(f1_path)
 
 f1_agg <- c()
 for (i in 1:length(all_files)) {
-  f1_agg[[i]] <- openxlsx::read.xlsx(all_files[i]) %>% mutate(mod = "f1")
+  f1_agg[[i]] <- openxlsx::read.xlsx(all_files[i])
   print(paste0("completed ", round(i / length(all_files) * 100, 0)))
 }
 
-setwd("/Users/jeremyflood/Library/CloudStorage/OneDrive-Personal/Documents/Grad School/2024-2025/Fall 2025/reCDF/reCDF/Variance Estimation/Data/Cached Iter Files/f3_results")
-all_files_f3 <- list.files("/Users/jeremyflood/Library/CloudStorage/OneDrive-Personal/Documents/Grad School/2024-2025/Fall 2025/reCDF/reCDF/Variance Estimation/Data/Cached Iter Files/f3_results")
+f3_path <- "/Users/jeremyflood/Library/CloudStorage/OneDrive-Personal/Documents/Grad School/2024-2025/Fall 2025/reCDF/reCDF/Variance Estimation/Additional Requests/Adding Smaller nB/f3/Cached Iter Files"
+setwd(f3_path)
+all_files_f3 <- list.files(f3_path)
+
 
 f3_agg <- c()
 for (i in 1:length(all_files_f3)) {
@@ -59,5 +61,5 @@ final_results <- list(
 )
 names(final_results) <- c("raw", "summary")
 
-setwd("/Users/jeremyflood/Library/CloudStorage/OneDrive-Personal/Documents/Grad School/2024-2025/Fall 2025/reCDF/reCDF/Variance Estimation/Data/")
-openxlsx::write.xlsx(cleaned_results, paste0("final_agg_results.xlsx"))
+setwd("/Users/jeremyflood/Library/CloudStorage/OneDrive-Personal/Documents/Grad School/2024-2025/Fall 2025/reCDF/reCDF/Variance Estimation/Additional Requests/Adding Smaller nB")
+openxlsx::write.xlsx(final_results, paste0("final_agg_results.xlsx"))
