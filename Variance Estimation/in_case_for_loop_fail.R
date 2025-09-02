@@ -62,4 +62,4 @@ final_results <- list(
 names(final_results) <- c("raw", "summary")
 
 setwd("/Users/jeremyflood/Library/CloudStorage/OneDrive-Personal/Documents/Grad School/2024-2025/Fall 2025/reCDF/reCDF/Variance Estimation/Additional Requests/Adding Smaller nB")
-openxlsx::write.xlsx(final_results, paste0("final_agg_results.xlsx"))
+openxlsx::write.xlsx(cleaned_results, paste0("final_agg_results.xlsx")) # github doesn't like large files
