@@ -546,14 +546,33 @@ for (i in 1:length(mod_list)) {
   dat_together[[i]] <- openxlsx::read.xlsx(mod_list[i], sheet = "perf") %>% mutate(mod = paste0("f", i))
 }
 
-est_label <- c(
-  "B_plug_cdf" = TeX("$\\hat{F}_{B}$"),
-  "lm_plug_cdf" = TeX("$\\hat{F}_{P}"),
-  "m_lm_cdf" = TeX("$\\hat{F}_{R}"),
-  "B_plug_q" = TeX("$\\hat{t}_{B}"),
-  "lm_plug_q" = TeX("$\\hat{t}_{P}"),
-  "m_lm_q" = TeX("$\\hat{t}_{R}")
-)
+# before we continue, we need to get a sense of missingness for our quantile estimators.
+# For this we must consult the big dataset.
+
+raw_results <- c()
+
+for (i in 1:length(mod_list)) {
+  raw_results[[i]] <- openxlsx::read.xlsx(mod_list[i], sheet = "raw") %>% mutate(mod = paste0("f", i))
+  print(i)
+}
+
+F_N <- c(.01, .10, .25, .50, .75, .90, .99)
+
+raw_results %>%
+  bind_rows() %>%
+  dplyr::select(paste0(F_N * 100, "%"), everything()) %>%
+  pivot_longer(cols = 1:length(F_N), names_to = "perc") %>%
+  mutate(is_value_na = is.na(value)) %>%
+  group_by(name, group, miss, nB, mod, perc) %>%
+  dplyr::summarize(prop_miss = round(mean(is_value_na) * 100, digits = 2)) %>%
+  filter(prop_miss >= 50) %>% # if more than half is missing, it is not trustworthy.
+  arrange(-prop_miss) %>%
+  print(n = 100) %>%
+  arrange(mod, nB, miss)
+
+# these results tell us that quantile estimation at the 99th percentile failed
+# for models f3, f4.
+
 
 
 plots_together <- c()
@@ -567,6 +586,7 @@ for (i in 1:length(nB)) {
     # filter(miss == 'MAR') %>%
     mutate(new_est = paste0(est, "_", group)) %>%
     dplyr::select(nB, mod, miss, perc, new_est, est, group, rrmse) %>%
+    mutate(rrmse = ifelse(group == "q" & mod %in% c("f3", "f4") & perc == "99%" & new_est == "m_lm_q", NA, rrmse)) %>% # filter out majority missing
     mutate(est = factor(est, labels = c("B_plug" = "Naive", "lm_plug" = "Plug-in", "m_lm" = "Residual eCDF"))) %>%
     mutate(mod = factor(mod,
       labels = c(
