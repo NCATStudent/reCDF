@@ -86,7 +86,7 @@ mod <- "f3"
 r <- .15
 
 # Superpopulation Model
-if (mod == "f3") {
+if (mod == "f1") {
   set.seed(seed)
   x1 <- rnorm(N, mean = 2, sd = 1)
   x2 <- rnorm(N, mean = 2, sd = 1)
