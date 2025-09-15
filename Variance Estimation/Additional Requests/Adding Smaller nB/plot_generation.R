@@ -34,7 +34,8 @@ cleaned_results <- rbind(
   cleaned_results_20nA
 )
 
-
+cleaned_results %>% 
+  filter(mod == 'f3', miss == 'MAR', est_type == 'cdf', nB != 100)
 plots <- c()
 
 mods <- c(1, 3)
@@ -46,14 +47,14 @@ for (i in 1:length(mods)) {
     filter(mod == paste0("f", mods[i]), est_type == "cdf") %>% # for now
     mutate(se_val = sqrt(est_var)) %>%
     mutate(rb = (est_var - MC_var) / MC_var * 100) %>%
-    dplyr::select(-c(MC_var, pop_quant, est_value, est_var)) %>%
+    dplyr::select(-c(MC_var, pop_quant, est_value)) %>%
     mutate(CR = CR * 100) %>%
-    dplyr::select(CR, se_val, d, rb, everything()) %>%
+    dplyr::select(CR, est_var, d, rb, everything()) %>%
     pivot_longer(cols = 1:4, names_to = "perf") %>%
-    mutate(perf = factor(perf, levels = c("CR", "d", "se_val", "rb"), labels = c(
+    mutate(perf = factor(perf, levels = c("CR", "d", "est_var", "rb"), labels = c(
       "CR" = TeX("\\% CR"),
       "d" = "AL",
-      "se_val" = TeX("\\widehat{SE}"),
+      "est_var" = TeX("\\widehat{Var}"),
       "rb" = TeX("\\% RB")
     ))) %>%
     mutate(est_type = factor(est_type,
@@ -96,14 +97,14 @@ for (i in 1:length(mods)) {
     filter(mod == paste0("f", mods[i]), est_type == "t") %>% # for now
     mutate(se_val = sqrt(est_var)) %>%
     mutate(rb = (est_var - MC_var) / MC_var * 100) %>%
-    dplyr::select(-c(MC_var, pop_quant, est_value, est_var)) %>%
+    dplyr::select(-c(MC_var, pop_quant, est_value)) %>%
     mutate(CR = CR * 100) %>%
-    dplyr::select(CR, se_val, d, rb, everything()) %>%
+    dplyr::select(CR, est_var, d, rb, everything()) %>%
     pivot_longer(cols = 1:4, names_to = "perf") %>%
-    mutate(perf = factor(perf, levels = c("CR", "d", "se_val", "rb"), labels = c(
+    mutate(perf = factor(perf, levels = c("CR", "d", "est_var", "rb"), labels = c(
       "CR" = TeX("\\% CR"),
       "d" = "AL",
-      "se_val" = TeX("\\widehat{SE}"),
+      "est_var" = TeX("\\widehat{Var}"),
       "rb" = TeX("\\% RB")
     ))) %>%
     mutate(est_type = factor(est_type,

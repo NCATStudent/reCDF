@@ -67,7 +67,7 @@ dat_together %>%
   mutate(Missingness = factor(miss)) %>%
   arrange(nB, perc) %>%
   ggplot(aes(x = perc_strip, y = rrmse^(1 / 2), color = est, group= interaction(est, nB))) +
-  geom_line(linewidth = .5) +
+  geom_line(aes(linetype = nB)) +
   geom_point(size = 1) +
   facet_grid(
     scales = "fixed", rows = dplyr::vars(cat_est, Missingness), cols = dplyr::vars(mod),

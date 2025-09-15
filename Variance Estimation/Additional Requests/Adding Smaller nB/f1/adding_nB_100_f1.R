@@ -1064,7 +1064,7 @@ cleaned_results <- cleaned_ddf %>%
   ) %>%
   ungroup() %>%
   left_join(mc_results, by = c("est_type", "perc", "miss", "nB", "var_type")) %>%
-  mutate(rb = ((MC_var - est_var) / MC_var) * 100) %>%
+  mutate(rb = ((est_var - MC_var) / MC_var) * 100) %>%
   mutate(nsim = nsim, L = L)
 
 final_results <- list(
