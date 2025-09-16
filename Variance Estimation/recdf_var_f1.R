@@ -76,6 +76,7 @@ require(foreach)
 require(doParallel)
 require(styler)
 require(RcppAlgos)
+require(gitcreds)
 
 seed <- 101
 nsim <- L <- 1500 # if you wish to change L, make sure to also change it in the function below.
@@ -264,7 +265,7 @@ samp.f <- function(samp, A, B_MAR_nA, B_MAR_20nA, B_MNAR_1nA, B_MNAR_20nA, r, po
       v1 <- (1 - nA / N) / nA * var(e_ecdf(qN_vals - lm_pred_A))
 
       # this part is gonna be computationally painful, fair warning :/
-      raw_index <- expand.grid(nThreads = detectCores() -1,i_it = 1:nA, h_it = 1:nA)
+      raw_index <- expandGird(nThreads = detectCores() -1, return_df = TRUE,i_it = 1:nA, h_it = 1:nA)
 
       Rh_df <- A[raw_index["h_it"] %>% unlist(), ] %>%
         dplyr::select(-c(y, weight, Prob)) %>%
@@ -426,7 +427,7 @@ samp.f <- function(samp, A, B_MAR_nA, B_MAR_20nA, B_MNAR_1nA, B_MNAR_20nA, r, po
       v1 <- (1 - nA / N) / nA * var(e_ecdf(hatq - lm_pred_A))
 
       # this part has to get the min, fair warning :/
-      raw_index <- expand.grid(nThreads = detectCores() -1,i_it = 1:nA, h_it = 1:nA)
+      raw_index <- expandGird(nThreads = detectCores() -1, return_df = TRUE,i_it = 1:nA, h_it = 1:nA)
 
       Rh_df <- A[raw_index["h_it"] %>% unlist(), ] %>%
         dplyr::select(-c(y, weight, Prob)) %>%
