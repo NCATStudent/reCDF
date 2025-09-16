@@ -1070,7 +1070,7 @@ samp.f <- function(samp, A, B_MAR_nA, B_MAR_20nA, B_MNAR_1nA, B_MNAR_20nA, r, po
 }
 
 results <- c()
-for (i in 1:nsim) {
+for (i in 395:nsim) {
   results[[i]] <- samp.f(
     A = As[[i]],
     B_MAR_nA = Bs_MAR_1nA[[i]],
