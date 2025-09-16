@@ -70,10 +70,13 @@ require(splines)
 require(future.apply)
 require(latex2exp)
 require(ggplot2)
+require(RcppAlgos)
 
-N = 1e05
-nB = c(.01, .20)*N
-mod = 'f3'
+N <- 1e05
+nB <- c(.01, .20) * N
+nA <- 1000
+seed <- 101
+mod <- "f1"
 if (mod == "f1") {
   set.seed(seed)
   x1 <- rnorm(N, mean = 2, sd = 1)
@@ -122,16 +125,124 @@ if (mod == "f1") {
 
 pop <- as.data.frame(cbind(X, y))
 
-
-lm_pop = lm(y~., data = pop %>% dplyr::select(
-  paste0('x', 1:p), 'y'
-))
-
-b_N1 = lm_pop$coefficients
-b_N2 = lm_pop$coefficients
-b_N3 =  
 # population characteristics
 mu <- mean(pop$y)
 F_N <- c(.01, .10, .25, .50, .75, .90, .99)
 q <- quantile(pop$y, probs = F_N, type = 1)
 
+# run for model f1
+nBs <- nB[1]
+ts <- q[1]
+mX_bs <- 0 + 4 * x1 + 4 * x2 + 2 * x3 + 2 * x4
+vX <- sqrt(3)
+V2_const <- (1 / nBs) * (nA - 1) / (N * (N - 1)) * 1 / nA
+
+# get variances 
+
+## my beloved
+
+V1 <- (1 - nA / N) / nA * var(pnorm((ts - mX_bs) / vX))
+
+V2_2 <- -V2_const * sum(pnorm((ts - mX_bs) / vX))^2
+
+## pain in the ass
+
+raw_index <- expandGrid(i_it = 1:nA, h_it = 1:nA, nThreads = detectCores() - 1)
+
+Rh_df <- A[raw_index["h_it"] %>% unlist(), ] %>%
+  dplyr::select(-c(y, weight, Prob)) %>%
+  mutate(Rh = qN_vals - predict(lm_B, newdata = .)) %>%
+  mutate(h_it = raw_index["h_it"]) %>%
+  dplyr::select(h_it, Rh)
+
+Ri_df <- A[raw_index["i_it"] %>% unlist(), ] %>%
+  dplyr::select(-c(y, weight, Prob)) %>%
+  mutate(Ri = qN_vals - predict(lm_B, newdata = .)) %>%
+  mutate(i_it = raw_index["i_it"]) %>%
+  dplyr::select(i_it, Ri)
+
+da_Ghats <- Rh_df %>%
+  cbind(Ri_df) %>%
+  mutate(da_min = pmin(Rh, Ri)) %>%
+  dplyr::select(
+    h_it, i_it, everything()
+  ) %>%
+  mutate(
+    Ghat_min = e_ecdf(da_min)
+  ) %>%
+  dplyr::select(Ghat_min) %>%
+  unlist()
+
+v2_1 <- sum(da_Ghats) * (1 / (nB * nA^2))
+
+# now the other one
+v2_2 <- (1 / (nA^2 * nB)) * sum(A %>%
+                                  dplyr::select(-c(weight, y, Prob)) %>%
+                                  mutate(Rh = qN_vals - predict(lm_B, newdata = .)) %>%
+                                  mutate(Ghat_h = e_ecdf(Rh)) %>%
+                                  dplyr::select(Ghat_h) %>%
+                                  unlist())^2
+vars_to <- v1 + (v2_1 - v2_2)
+
+
+pnorm(1.68)
+
+
+
+lm_pop <- lm(y ~ ., data = pop %>% dplyr::select(
+  paste0("x", 1:p), "y"
+))
+
+b_N1 <- lm_pop$coefficients # 1e+05
+b_N2 <- lm_pop$coefficients # 1e+07
+b_N3 <- lm_pop$coefficients # 1e+08
+
+
+mlm_est_func <- function(qN_vals, nA) {
+  m_lm <- (1 / sum(A$weight)) * sum(A$weight * e_ecdf(qN_vals - lm_pred_A))
+  
+  v1 <- (1 - nA / N) / nA * var(e_ecdf(qN_vals - lm_pred_A))
+  
+  # this part is gonna be computationally painful, fair warning :/
+  raw_index <- expand.grid(i_it = 1:nA, h_it = 1:nA)
+  
+  Rh_df <- A[raw_index["h_it"] %>% unlist(), ] %>%
+    dplyr::select(-c(y, weight, Prob)) %>%
+    mutate(Rh = qN_vals - predict(lm_B, newdata = .)) %>%
+    mutate(h_it = raw_index["h_it"]) %>%
+    dplyr::select(h_it, Rh)
+  
+  Ri_df <- A[raw_index["i_it"] %>% unlist(), ] %>%
+    dplyr::select(-c(y, weight, Prob)) %>%
+    mutate(Ri = qN_vals - predict(lm_B, newdata = .)) %>%
+    mutate(i_it = raw_index["i_it"]) %>%
+    dplyr::select(i_it, Ri)
+  
+  da_Ghats <- Rh_df %>%
+    cbind(Ri_df) %>%
+    mutate(da_min = pmin(Rh, Ri)) %>%
+    dplyr::select(
+      h_it, i_it, everything()
+    ) %>%
+    mutate(
+      Ghat_min = e_ecdf(da_min)
+    ) %>%
+    dplyr::select(Ghat_min) %>%
+    unlist()
+  
+  v2_1 <- sum(da_Ghats) * (1 / (nB * nA^2))
+  
+  # now the other one
+  v2_2 <- (1 / (nA^2 * nB)) * sum(A %>%
+                                    dplyr::select(-c(weight, y, Prob)) %>%
+                                    mutate(Rh = qN_vals - predict(lm_B, newdata = .)) %>%
+                                    mutate(Ghat_h = e_ecdf(Rh)) %>%
+                                    dplyr::select(Ghat_h) %>%
+                                    unlist())^2
+  vars_to <- v1 + (v2_1 - v2_2)
+  
+  return(data.frame(
+    vars_to,
+    m_lm
+  ))
+}
