@@ -147,9 +147,9 @@ V2_2 <- -V2_const * sum(pnorm((ts - mX_bs) / vX))^2
 
 ## pain in the ass
 
-raw_index <- expandGrid(i_it = 1:nA, h_it = 1:nA, nThreads = detectCores() - 1)
+raw_index <- expandGrid(i_it = 1:(.05*N), h_it = 1:N, nThreads = detectCores() - 1, return_df = TRUE)
 
-Rh_df <- A[raw_index["h_it"] %>% unlist(), ] %>%
+Rh_df <- pop[raw_index["h_it"] %>% unlist(), ] %>%
   dplyr::select(-c(y, weight, Prob)) %>%
   mutate(Rh = qN_vals - predict(lm_B, newdata = .)) %>%
   mutate(h_it = raw_index["h_it"]) %>%

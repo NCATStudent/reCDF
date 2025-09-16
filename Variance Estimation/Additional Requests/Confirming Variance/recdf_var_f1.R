@@ -79,9 +79,9 @@ require(RcppAlgos)
 require(gitcreds)
 
 seed <- 101
-nsim <- L <- 1500 # if you wish to change L, make sure to also change it in the function below.
-N <- 1e05
-nA <- 1000
+nsim <- L <- 750 # if you wish to change L, make sure to also change it in the function below.
+N <- 10000
+nA <- .05*N
 alp <- .10
 mod <- "f1"
 r <- .15
@@ -149,21 +149,21 @@ As <- lapply(1:nsim, function(seed) {
 
 B_generator <- function(miss, nB, r) {
   sizes_rounded <- round(c(r * nB, (1 - r) * nB),
-    digits = 0
+                         digits = 0
   )
-
+  
   sizes <- ifelse(sizes_rounded < 1, 1, sizes_rounded)
   if (miss == "MAR") {
     strat <- paste0("x", c(abs(cor(X, y)) %>% which.max()))
     pop_restrat <- pop %>%
       mutate(restrat = ifelse(get(strat) <= median(get(strat)), 1,
-        2
+                              2
       )) %>%
       arrange(restrat)
     s.B <- sampling::strata(pop_restrat,
-      stratanames = "restrat",
-      size = sizes,
-      method = "srswor"
+                            stratanames = "restrat",
+                            size = sizes,
+                            method = "srswor"
     )
     B <- getdata(pop_restrat, s.B)
   } else if (miss == "MNAR") {
@@ -171,9 +171,9 @@ B_generator <- function(miss, nB, r) {
       mutate(restrat = ifelse(y < median(y), "0", "1") %>% as.factor()) %>%
       arrange(restrat)
     s.B <- sampling::strata(pop_restrat,
-      stratanames = "restrat",
-      size = sizes,
-      method = "srswor"
+                            stratanames = "restrat",
+                            size = sizes,
+                            method = "srswor"
     )
     B <- getdata(pop_restrat, s.B)
   }
@@ -184,24 +184,24 @@ B_generator <- function(miss, nB, r) {
 ## MAR
 
 Bs_MAR_1nA <- mclapply(1:nsim, function(seed) {
-  B_generator(miss = "MAR", nB = 1000, r = r)
-}, mc.cores = 7)
+  B_generator(miss = "MAR", nB = .05*N, r = r)
+}, mc.cores = 10)
 
 Bs_MAR_20nA <- mclapply(1:nsim, function(seed) {
-  B_generator(miss = "MAR", nB = 20 * nA, r = r)
-}, mc.cores = 7)
+  B_generator(miss = "MAR", nB = .20*N, r = r)
+}, mc.cores = 10)
 
 
 
 ## MNAR
 
 Bs_MNAR_1nA <- mclapply(1:nsim, function(seed) {
-  B_generator(miss = "MNAR", nB = 1000, r = r)
-}, mc.cores = 7)
+  B_generator(miss = "MNAR", nB = .05*N, r = r)
+}, mc.cores = 10)
 
 Bs_MNAR_20nA <- mclapply(1:nsim, function(seed) {
-  B_generator(miss = "MNAR", nB = 20 * nA, r = r)
-}, mc.cores = 7)
+  B_generator(miss = "MNAR", nB = .20*N, r = r)
+}, mc.cores = 10)
 
 # for testing
 # B_perm_MAR_1nA= Bs_MAR_1nA[[1]]
@@ -213,26 +213,26 @@ Bs_MNAR_20nA <- mclapply(1:nsim, function(seed) {
 
 
 
-samp.f <- function(samp, A, B_MAR_nA, B_MAR_20nA, B_MNAR_1nA, B_MNAR_20nA, r, pop, p, miss, L = 1500, mc_cores = 15, alp = .10, seed = 101) {
+samp.f <- function(samp, A, B_MAR_nA, B_MAR_20nA, B_MNAR_1nA, B_MNAR_20nA, r, pop, p, miss, L = 750, mc_cores = 15, alp = .10, seed = 101) {
   options(dplyr.summarise.inform = FALSE)
-
+  
   var_cdf <- function(B, A, p, alp, da_miss, isboot, mc_cores = 15) {
     nA <- nrow(A)
     nB <- nrow(B)
     # defining A
     ecdf_A <- ecdf(A$y)
     ecdf_B <- ecdf(B$y)
-
+    
     # lmod
     lm_B <- lm(y ~ .,
-      data = B[, c(
-        paste0("x", 1:p),
-        "y"
-      )]
+               data = B[, c(
+                 paste0("x", 1:p),
+                 "y"
+               )]
     )
     lm_pred_B <- predict(lm_B, newdata = B)
     lm_pred_A <- predict(lm_B, newdata = A)
-
+    
     pA_pred <- svydesign(
       id = ~1,
       weights = ~weight,
@@ -244,41 +244,41 @@ samp.f <- function(samp, A, B_MAR_nA, B_MAR_20nA, B_MNAR_1nA, B_MNAR_20nA, r, po
         )
     )
     ecdf_lm <- svycdf(~y, pA_pred)
-
-
+    
+    
     #
     # # plug-in
-
+    
     A_plug <- ecdf_A(q_N)
     B_plug <- ecdf_B(q_N)
     lm_plug <- ecdf_lm[[1]](q_N)
     names(lm_plug) <- names(A_plug) <- names(lm_plug) <- names(q_N)
-
-
+    
+    
     # reCDF
     v_lm <- B$y - lm_pred_B
     e_ecdf <- ecdf(v_lm)
-
+    
     mlm_est_func <- function(qN_vals, nA) {
       m_lm <- (1 / sum(A$weight)) * sum(A$weight * e_ecdf(qN_vals - lm_pred_A))
-
+      
       v1 <- (1 - nA / N) / nA * var(e_ecdf(qN_vals - lm_pred_A))
-
+      
       # this part is gonna be computationally painful, fair warning :/
-      raw_index <- expandGird(nThreads = detectCores() -1, return_df = TRUE,i_it = 1:nA, h_it = 1:nA)
-
+      raw_index <- expandGrid(nThreads = detectCores() -1, return_df = TRUE,i_it = 1:nA, h_it = 1:nA)
+      
       Rh_df <- A[raw_index["h_it"] %>% unlist(), ] %>%
         dplyr::select(-c(y, weight, Prob)) %>%
         mutate(Rh = qN_vals - predict(lm_B, newdata = .)) %>%
         mutate(h_it = raw_index["h_it"]) %>%
         dplyr::select(h_it, Rh)
-
+      
       Ri_df <- A[raw_index["i_it"] %>% unlist(), ] %>%
         dplyr::select(-c(y, weight, Prob)) %>%
         mutate(Ri = qN_vals - predict(lm_B, newdata = .)) %>%
         mutate(i_it = raw_index["i_it"]) %>%
         dplyr::select(i_it, Ri)
-
+      
       da_Ghats <- Rh_df %>%
         cbind(Ri_df) %>%
         mutate(da_min = pmin(Rh, Ri)) %>%
@@ -290,24 +290,24 @@ samp.f <- function(samp, A, B_MAR_nA, B_MAR_20nA, B_MNAR_1nA, B_MNAR_20nA, r, po
         ) %>%
         dplyr::select(Ghat_min) %>%
         unlist()
-
+      
       v2_1 <- sum(da_Ghats) * (1 / (nB * nA^2))
-
+      
       # now the other one
       v2_2 <- (1 / (nA^2 * nB)) * sum(A %>%
-        dplyr::select(-c(weight, y, Prob)) %>%
-        mutate(Rh = qN_vals - predict(lm_B, newdata = .)) %>%
-        mutate(Ghat_h = e_ecdf(Rh)) %>%
-        dplyr::select(Ghat_h) %>%
-        unlist())^2
+                                        dplyr::select(-c(weight, y, Prob)) %>%
+                                        mutate(Rh = qN_vals - predict(lm_B, newdata = .)) %>%
+                                        mutate(Ghat_h = e_ecdf(Rh)) %>%
+                                        dplyr::select(Ghat_h) %>%
+                                        unlist())^2
       vars_to <- v1 + (v2_1 - v2_2)
-
+      
       return(data.frame(
         vars_to,
         m_lm
       ))
     }
-
+    
     # idea here -- don't run asymp variance for boot reps
     if (isboot == TRUE) {
       m_lm <- vars_to <- c()
@@ -325,20 +325,20 @@ samp.f <- function(samp, A, B_MAR_nA, B_MAR_20nA, B_MNAR_1nA, B_MNAR_20nA, r, po
           )
         ), mc.cores = mc_cores
       )
-
+      
       vars_to <-
         vars_to_results[1, ] %>%
         bind_rows() %>%
         unlist()
-
-
+      
+      
       m_lm <-
         vars_to_results[2, ] %>%
         bind_rows() %>%
         unlist()
     }
     names(vars_to) <- names(m_lm) <- names(q_N)
-
+    
     final_cdf <- rbind(
       F_N,
       A_plug,
@@ -350,58 +350,58 @@ samp.f <- function(samp, A, B_MAR_nA, B_MAR_20nA, B_MNAR_1nA, B_MNAR_20nA, r, po
       rownames_to_column("name") %>%
       mutate(group = "cdf") %>%
       mutate(val = "mc")
-
-
-
+    
+    
+    
     # organizing variances
-
-
+    
+    
     quant_est <- function(F_N, nA) {
       # sorry this is so messy, but ie_result is needed
       ### EXCUSE THE MESS
-
+      
       # R
       q_mlm <- function(a, b, e_ecdf = e_ecdf) {
         return(e_ecdf(a - b) %>% mean())
       }
-
+      
       vq <- Vectorize(q_mlm,
-        vectorize.args = "a"
+                      vectorize.args = "a"
       )
-
+      
       mlm_df <- data.frame(
         probs = vq(lm_pred_A, lm_pred_A, e_ecdf = e_ecdf),
         t = lm_pred_A
       ) %>%
         arrange(probs)
-
+      
       ie_fun <- function(dats, a) {
         return(dats %>%
-          lapply(dplyr::filter, probs >= a) %>%
-          lapply(function(x) {
-            if (nrow(x) == 0) {
-              data.frame(
-                probs = NA,
-                t = NA
-              )
-            } else {
-              x
-            }
-          }) %>%
-          lapply(setNames, c("probs", "t")) %>%
-          lapply(dplyr::arrange, t) %>%
-          lapply(dplyr::slice, 1) %>%
-          lapply(dplyr::select, -probs) %>%
-          bind_rows() %>%
-          mutate(
-            name = c(
-              "m_lm"
-            ) %>% as.factor(),
-            a = a
-          ) %>%
-          dplyr::select(a, name, t))
+                 lapply(dplyr::filter, probs >= a) %>%
+                 lapply(function(x) {
+                   if (nrow(x) == 0) {
+                     data.frame(
+                       probs = NA,
+                       t = NA
+                     )
+                   } else {
+                     x
+                   }
+                 }) %>%
+                 lapply(setNames, c("probs", "t")) %>%
+                 lapply(dplyr::arrange, t) %>%
+                 lapply(dplyr::slice, 1) %>%
+                 lapply(dplyr::select, -probs) %>%
+                 bind_rows() %>%
+                 mutate(
+                   name = c(
+                     "m_lm"
+                   ) %>% as.factor(),
+                   a = a
+                 ) %>%
+                 dplyr::select(a, name, t))
       }
-
+      
       ie_result <- mapply(
         FUN = ie_fun,
         a = F_N,
@@ -419,28 +419,28 @@ samp.f <- function(samp, A, B_MAR_nA, B_MAR_20nA, B_MNAR_1nA, B_MNAR_20nA, r, po
         dplyr::select(t) %>%
         unlist() %>%
         unname()
-
-
+      
+      
       hatF_hatT <- (1 / sum(A$weight)) * sum(A$weight * e_ecdf(hatq - lm_pred_A))
-
-
+      
+      
       v1 <- (1 - nA / N) / nA * var(e_ecdf(hatq - lm_pred_A))
-
+      
       # this part has to get the min, fair warning :/
-      raw_index <- expandGird(nThreads = detectCores() -1, return_df = TRUE,i_it = 1:nA, h_it = 1:nA)
-
+      raw_index <- expandGrid(nThreads = detectCores() -1, return_df = TRUE,i_it = 1:nA, h_it = 1:nA)
+      
       Rh_df <- A[raw_index["h_it"] %>% unlist(), ] %>%
         dplyr::select(-c(y, weight, Prob)) %>%
         mutate(Rh = hatq - predict(lm_B, newdata = .)) %>%
         mutate(h_it = raw_index["h_it"]) %>%
         dplyr::select(h_it, Rh)
-
+      
       Ri_df <- A[raw_index["i_it"] %>% unlist(), ] %>%
         dplyr::select(-c(y, weight, Prob)) %>%
         mutate(Ri = hatq - predict(lm_B, newdata = .)) %>%
         mutate(i_it = raw_index["i_it"]) %>%
         dplyr::select(i_it, Ri)
-
+      
       da_Ghats <- Rh_df %>%
         cbind(Ri_df) %>%
         mutate(da_min = pmin(Rh, Ri)) %>%
@@ -452,19 +452,19 @@ samp.f <- function(samp, A, B_MAR_nA, B_MAR_20nA, B_MNAR_1nA, B_MNAR_20nA, r, po
         ) %>%
         dplyr::select(Ghat_min) %>%
         unlist()
-
+      
       v2_1 <- sum(da_Ghats) * (1 / (nB * nA^2))
-
+      
       # now the other one
       v2_2 <- (1 / (nA^2 * nB)) * sum(A %>%
-        dplyr::select(-c(weight, y, Prob)) %>%
-        mutate(Rh = hatq - predict(lm_B, newdata = .)) %>%
-        mutate(Ghat_h = e_ecdf(Rh)) %>%
-        dplyr::select(Ghat_h) %>%
-        unlist())^2
+                                        dplyr::select(-c(weight, y, Prob)) %>%
+                                        mutate(Rh = hatq - predict(lm_B, newdata = .)) %>%
+                                        mutate(Ghat_h = e_ecdf(Rh)) %>%
+                                        dplyr::select(Ghat_h) %>%
+                                        unlist())^2
       vars_q <- v1 + (v2_1 - v2_2)
-
-
+      
+      
       LL.q_N <- list(mlm_df) %>%
         lapply(dplyr::filter, probs >= a.a - qnorm(1 - alp / 2) * sqrt(vars_q)) %>%
         lapply(function(x) {
@@ -485,7 +485,7 @@ samp.f <- function(samp, A, B_MAR_nA, B_MAR_20nA, B_MNAR_1nA, B_MNAR_20nA, r, po
         dplyr::select(t) %>%
         unlist() %>%
         unname()
-
+      
       UL.q_N <- list(mlm_df) %>%
         lapply(dplyr::filter, probs >= a.a + qnorm(1 - alp / 2) * sqrt(vars_q)) %>%
         lapply(function(x) {
@@ -506,58 +506,58 @@ samp.f <- function(samp, A, B_MAR_nA, B_MAR_20nA, B_MNAR_1nA, B_MNAR_20nA, r, po
         dplyr::select(t) %>%
         unlist() %>%
         unname()
-
+      
       q_var <- vars_q
       return(list(data.frame(F_N, hatq, q_var, LL.q_N, UL.q_N, hatF_hatT)))
     }
-
-
+    
+    
     # idea here -- don't run asymp variance for boot reps
     if (isboot == TRUE) {
       # Quantile Estimation
-
+      
       # R
       q_mlm <- function(a, b, e_ecdf = e_ecdf) {
         return(e_ecdf(a - b) %>% mean())
       }
-
+      
       vq <- Vectorize(q_mlm,
-        vectorize.args = "a"
+                      vectorize.args = "a"
       )
-
+      
       mlm_df <- data.frame(
         probs = vq(lm_pred_A, lm_pred_A, e_ecdf = e_ecdf),
         t = lm_pred_A
       ) %>%
         arrange(probs)
-
+      
       ie_fun <- function(dats, a) {
         return(dats %>%
-          lapply(dplyr::filter, probs >= a) %>%
-          lapply(function(x) {
-            if (nrow(x) == 0) {
-              data.frame(
-                probs = NA,
-                t = NA
-              )
-            } else {
-              x
-            }
-          }) %>%
-          lapply(setNames, c("probs", "t")) %>%
-          lapply(dplyr::arrange, t) %>%
-          lapply(dplyr::slice, 1) %>%
-          lapply(dplyr::select, -probs) %>%
-          bind_rows() %>%
-          mutate(
-            name = c(
-              "m_lm"
-            ) %>% as.factor(),
-            a = a
-          ) %>%
-          dplyr::select(a, name, t))
+                 lapply(dplyr::filter, probs >= a) %>%
+                 lapply(function(x) {
+                   if (nrow(x) == 0) {
+                     data.frame(
+                       probs = NA,
+                       t = NA
+                     )
+                   } else {
+                     x
+                   }
+                 }) %>%
+                 lapply(setNames, c("probs", "t")) %>%
+                 lapply(dplyr::arrange, t) %>%
+                 lapply(dplyr::slice, 1) %>%
+                 lapply(dplyr::select, -probs) %>%
+                 bind_rows() %>%
+                 mutate(
+                   name = c(
+                     "m_lm"
+                   ) %>% as.factor(),
+                   a = a
+                 ) %>%
+                 dplyr::select(a, name, t))
       }
-
+      
       ie_result <- mapply(
         FUN = ie_fun,
         a = F_N,
@@ -566,9 +566,9 @@ samp.f <- function(samp, A, B_MAR_nA, B_MAR_20nA, B_MNAR_1nA, B_MNAR_20nA, r, po
         )),
         SIMPLIFY = FALSE
       )
-
-
-
+      
+      
+      
       final_quant <- ie_result %>%
         bind_rows() %>%
         mutate(F_N = paste0(a * 100, "%")) %>%
@@ -584,14 +584,14 @@ samp.f <- function(samp, A, B_MAR_nA, B_MAR_20nA, B_MNAR_1nA, B_MNAR_20nA, r, po
           val = "mc"
         ) %>%
         rbind(q_N %>%
-          t() %>%
-          as.data.frame() %>%
-          mutate(
-            name = "F_N",
-            group = "q_N",
-            val = "mc"
-          ))
-
+                t() %>%
+                as.data.frame() %>%
+                mutate(
+                  name = "F_N",
+                  group = "q_N",
+                  val = "mc"
+                ))
+      
       hatF_hatT <- hatq <- LL.q <- UL.q <- q_var <- c()
       for (i in 1:length(F_N)) {
         a.a <- F_N[i]
@@ -602,21 +602,21 @@ samp.f <- function(samp, A, B_MAR_nA, B_MAR_20nA, B_MNAR_1nA, B_MNAR_20nA, r, po
           dplyr::select(t) %>%
           unlist() %>%
           unname()
-
+        
         hatF_hatT[i] <- (1 / sum(A$weight)) * sum(A$weight * e_ecdf(hatq[i] - lm_pred_A))
-
+        
         # since I have to do a for-loop anyway...
-
+        
         LL.q[i] <- UL.q[i] <- q_var[i] <- NA
       }
-
+      
       names(LL.q) <- names(UL.q) <- names(hatq) <- names(hatF_hatT) <- names(q_N)
-
+      
       q_var_df <- rbind(q_N, hatq, q_var, LL.q, UL.q, hatF_hatT) %>%
         as.data.frame() %>%
         rownames_to_column("name") %>%
         mutate(group = "q", val = "var")
-
+      
       final_df <- rbind(
         final_cdf,
         final_quant,
@@ -633,13 +633,13 @@ samp.f <- function(samp, A, B_MAR_nA, B_MAR_20nA, B_MNAR_1nA, B_MNAR_20nA, r, po
         as.data.frame() %>%
         dplyr::slice(-2) %>%
         rbind(t(vars_to) %>%
-          as.data.frame() %>%
-          mutate(
-            name = "m_lm_var",
-            group = "q",
-            val = "mc"
-          ) %>%
-          dplyr::select(colnames(final_cdf))) %>%
+                as.data.frame() %>%
+                mutate(
+                  name = "m_lm_var",
+                  group = "q",
+                  val = "mc"
+                ) %>%
+                dplyr::select(colnames(final_cdf))) %>%
         dplyr::select(-c(group, val))
     } else {
       qvar_results <- pbmcmapply(
@@ -652,35 +652,35 @@ samp.f <- function(samp, A, B_MAR_nA, B_MAR_20nA, B_MNAR_1nA, B_MNAR_20nA, r, po
         ), mc.cores = mc_cores
       ) %>%
         bind_rows()
-
+      
       hatq <- qvar_results %>%
         dplyr::select("hatq") %>%
         unlist()
-
+      
       q_var <- qvar_results %>%
         dplyr::select("q_var") %>%
         unlist()
-
+      
       LL.q_N <- qvar_results %>%
         dplyr::select("LL.q_N") %>%
         unlist()
-
+      
       UL.q_N <- qvar_results %>%
         dplyr::select("UL.q_N") %>%
         unlist()
-
+      
       hatF_hatT <- qvar_results %>%
         dplyr::select("hatF_hatT") %>%
         unlist()
-
-
+      
+      
       names(LL.q_N) <- names(UL.q_N) <- names(hatq) <- names(hatF_hatT) <- names(q_N)
-
+      
       q_var_df <- rbind(q_N, hatq, q_var, LL.q_N, UL.q_N, hatF_hatT) %>%
         as.data.frame() %>%
         rownames_to_column("name") %>%
         mutate(group = "q_N", val = "var")
-
+      
       final_df <- rbind(
         final_cdf,
         q_var_df
@@ -695,39 +695,39 @@ samp.f <- function(samp, A, B_MAR_nA, B_MAR_20nA, B_MNAR_1nA, B_MNAR_20nA, r, po
         as.data.frame() %>%
         dplyr::slice(-2) %>%
         rbind(t(vars_to) %>%
-          as.data.frame() %>%
-          mutate(
-            name = "m_lm_var",
-            group = "q_N",
-            val = "mc"
-          ) %>%
-          dplyr::select(colnames(final_cdf))) %>%
+                as.data.frame() %>%
+                mutate(
+                  name = "m_lm_var",
+                  group = "q_N",
+                  val = "mc"
+                ) %>%
+                dplyr::select(colnames(final_cdf))) %>%
         dplyr::select(-c(group, val)) %>%
         mutate(nB = nB, miss = da_miss)
-
+      
       # I know this is messy, but this is actually the easiest way to do this
-
+      
       # R
       q_mlm <- function(a, b, e_ecdf = e_ecdf) {
         return(e_ecdf(a - b) %>% mean())
       }
-
+      
       vq <- Vectorize(q_mlm,
-        vectorize.args = "a"
+                      vectorize.args = "a"
       )
-
+      
       mlm_df <- data.frame(
         probs = vq(lm_pred_A, lm_pred_A, e_ecdf = e_ecdf),
         t = lm_pred_A
       ) %>%
         arrange(probs)
     }
-
+    
     return(list(final_df, mlm_df))
   }
   # selecting A
-
-
+  
+  
   A_perm <- A %>%
     dplyr::select(paste0("x", 1:p), "y") %>%
     mutate(
@@ -735,30 +735,30 @@ samp.f <- function(samp, A, B_MAR_nA, B_MAR_20nA, B_MNAR_1nA, B_MNAR_20nA, r, po
       weight = N / nA,
       fpc = Prob
     )
-
+  
   B_perm_MAR_1nA <- B_MAR_nA
   B_perm_MAR_20nA <- B_MAR_20nA
   B_perm_MNAR_1nA <- B_MNAR_1nA
   B_perm_MNAR_20nA <- B_MNAR_20nA
-
-
+  
+  
   mydesign <- svydesign(
     ids = ~0,
     weights = ~weight,
     fpc = ~fpc,
     data = A_perm
   )
-
-
+  
+  
   bootstrap_rep_design <- as_bootstrap_design(mydesign,
-    type = "Rao-Wu-Yue-Beaumont",
-    replicates = L,
-    samp_method_by_stage = "SRSWOR"
+                                              type = "Rao-Wu-Yue-Beaumont",
+                                              replicates = L,
+                                              samp_method_by_stage = "SRSWOR"
   )
-
+  
   A_repweights_perm <- as_data_frame_with_weights(bootstrap_rep_design,
-    full_wgt_name = "FULL_SAMPLE_WGT",
-    rep_wgt_prefix = "REP_WGT_"
+                                                  full_wgt_name = "FULL_SAMPLE_WGT",
+                                                  rep_wgt_prefix = "REP_WGT_"
   ) %>%
     dplyr::select(-weight)
   #
@@ -770,38 +770,38 @@ samp.f <- function(samp, A, B_MAR_nA, B_MAR_20nA, B_MNAR_1nA, B_MNAR_20nA, r, po
       dplyr::select(y, paste0("x", 1:p), paste0("REP_WGT_", i), Prob) %>%
       dplyr::rename(weight = paste0("REP_WGT_", i))
   }
-
-
+  
+  
   # selecting B
-
-  ## nB = 1000
+  
+  ## nB = .05*N
   set.seed(seed)
-  B_list.MAR_1nA <- mc_replicate(L, list(B_perm_MAR_1nA[sample(1:1000,
-    size = 1000,
-    replace = TRUE
+  B_list.MAR_1nA <- mc_replicate(L, list(B_perm_MAR_1nA[sample(1:(.05*N),
+                                                               size = .05*N,
+                                                               replace = TRUE
   ), ]), mc.cores = mc_cores)
-
+  
   set.seed(seed)
-  B_list.MNAR_1nA <- mc_replicate(L, list(B_perm_MNAR_1nA[sample(1:1000,
-    size = 1000,
-    replace = TRUE
+  B_list.MNAR_1nA <- mc_replicate(L, list(B_perm_MNAR_1nA[sample(1:(.05*N),
+                                                                 size = .05*N,
+                                                                 replace = TRUE
   ), ]), mc.cores = mc_cores)
-
+  
   ## nB = 20000
   set.seed(seed)
-  B_list.MAR_20nA <- mc_replicate(L, list(B_perm_MAR_20nA[sample(1:(20 * 1000),
-    size = 20 * 1000,
-    replace = TRUE
+  B_list.MAR_20nA <- mc_replicate(L, list(B_perm_MAR_20nA[sample(1:(20 * .05*N),
+                                                                 size = 20 * .05*N,
+                                                                 replace = TRUE
   ), ]), mc.cores = mc_cores)
-
-
+  
+  
   set.seed(seed)
-  B_list.MNAR_20nA <- mc_replicate(L, list(B_perm_MNAR_20nA[sample(1:(20 * 1000),
-    size = 20 * 1000,
-    replace = TRUE
+  B_list.MNAR_20nA <- mc_replicate(L, list(B_perm_MNAR_20nA[sample(1:(20 * .05*N),
+                                                                   size = 20 * .05*N,
+                                                                   replace = TRUE
   ), ]), mc.cores = mc_cores)
-
-
+  
+  
   # For each a in A and b in B, compute bootstrap replicates
   #
   results.MAR_1nA <- pbmcmapply(
@@ -812,42 +812,42 @@ samp.f <- function(samp, A, B_MAR_nA, B_MAR_20nA, B_MNAR_1nA, B_MNAR_20nA, r, po
     mc.cores = mc_cores,
     SIMPLIFY = FALSE
   )
-
+  
   results.MAR_20nA <- pbmcmapply(var_cdf,
-    A = A_list,
-    B = B_list.MAR_20nA,
-    MoreArgs = list("p" = p, "alp" = .10, da_miss = "MAR", isboot = TRUE),
-    mc.cores = mc_cores,
-    SIMPLIFY = FALSE
+                                 A = A_list,
+                                 B = B_list.MAR_20nA,
+                                 MoreArgs = list("p" = p, "alp" = .10, da_miss = "MAR", isboot = TRUE),
+                                 mc.cores = mc_cores,
+                                 SIMPLIFY = FALSE
   )
-
+  
   results.MNAR_1nA <- pbmcmapply(var_cdf,
-    A = A_list,
-    B = B_list.MNAR_1nA,
-    MoreArgs = list("p" = p, "alp" = .10, da_miss = "MAR", isboot = TRUE),
-    mc.cores = mc_cores,
-    SIMPLIFY = FALSE
+                                 A = A_list,
+                                 B = B_list.MNAR_1nA,
+                                 MoreArgs = list("p" = p, "alp" = .10, da_miss = "MAR", isboot = TRUE),
+                                 mc.cores = mc_cores,
+                                 SIMPLIFY = FALSE
   )
-
+  
   results.MNAR_20nA <- pbmcmapply(var_cdf,
-    A = A_list,
-    B = B_list.MNAR_20nA,
-    MoreArgs = list("p" = p, "alp" = .10, da_miss = "MAR", isboot = TRUE),
-    mc.cores = mc_cores,
-    SIMPLIFY = FALSE
+                                  A = A_list,
+                                  B = B_list.MNAR_20nA,
+                                  MoreArgs = list("p" = p, "alp" = .10, da_miss = "MAR", isboot = TRUE),
+                                  mc.cores = mc_cores,
+                                  SIMPLIFY = FALSE
   )
-
+  
   results2 <- list(
     results.MAR_1nA %>% bind_rows() %>% mutate(nB = nA, miss = "MAR"),
-    results.MAR_20nA %>% bind_rows() %>% mutate(nB = 20 * nA, miss = "MAR"),
+    results.MAR_20nA %>% bind_rows() %>% mutate(nB = .20*N, miss = "MAR"),
     results.MNAR_1nA %>% bind_rows() %>% mutate(nB = nA, miss = "MNAR"),
-    results.MNAR_20nA %>% bind_rows() %>% mutate(nB = 20 * nA, miss = "MNAR")
+    results.MNAR_20nA %>% bind_rows() %>% mutate(nB = .20*N, miss = "MNAR")
   ) %>%
     lapply(filter, name %in% c("m_lm", "hatq", "hatF_hatT"))
-
-
+  
+  
   # Testing
-  # B_perm = Bs_MAR_20nA[[1]]
+  #B_perm = Bs_MAR_20nA[[1]]
   var_calcs <- function(A_perm, B_perm, L, alp, da_miss, da_nB) {
     asymp_var_cdf <- var_cdf(
       A = A_perm,
@@ -857,10 +857,10 @@ samp.f <- function(samp, A, B_MAR_nA, B_MAR_20nA, B_MNAR_1nA, B_MNAR_20nA, r, po
       da_miss = da_miss,
       isboot = FALSE
     )
-
+    
     actual <- asymp_var_cdf[[1]]
-
-
+    
+    
     standard_values <-
       actual %>%
       filter(name %in% c(
@@ -874,7 +874,7 @@ samp.f <- function(samp, A, B_MAR_nA, B_MAR_20nA, B_MNAR_1nA, B_MNAR_20nA, r, po
         names_to = "perc",
         values_to = "B_vals"
       )
-
+    
     boot_var <-
       results2 %>%
       bind_rows(.id = "iter") %>%
@@ -892,7 +892,7 @@ samp.f <- function(samp, A, B_MAR_nA, B_MAR_20nA, B_MNAR_1nA, B_MNAR_20nA, r, po
         values_to = "boot_vals"
       ) %>%
       left_join(standard_values,
-        by = c("nB", "miss", "name", "perc")
+                by = c("nB", "miss", "name", "perc")
       ) %>%
       group_by(nB, miss, name, perc) %>%
       dplyr::summarize(
@@ -906,18 +906,18 @@ samp.f <- function(samp, A, B_MAR_nA, B_MAR_20nA, B_MNAR_1nA, B_MNAR_20nA, r, po
       filter(bootstats == "boot_mean_est") %>%
       dplyr::select(-bootstats) %>%
       dplyr::select(nB, miss, perc, everything())
-
+    
     pop_quant <- data.frame(F_N = F_N, q_N = q_N, perc = paste0(F_N * 100, "%"))
-
-
+    
+    
     bigguy <-
       actual %>%
       dplyr::select(nB, miss, name, everything()) %>%
       pivot_longer(cols = 4:ncol(.), names_to = "perc") %>%
       pivot_wider() %>%
       left_join(boot_var %>%
-        dplyr::select(-c(value_hatq, value_m_lm, value_hatF_hatT)), by = c("nB", "miss", "perc"))
-
+                  dplyr::select(-c(value_hatq, value_m_lm, value_hatF_hatT)), by = c("nB", "miss", "perc"))
+    
     # reCDF est variance
     mlm_varsum <-
       bigguy %>%
@@ -956,9 +956,9 @@ samp.f <- function(samp, A, B_MAR_nA, B_MAR_20nA, B_MNAR_1nA, B_MNAR_20nA, r, po
       ) %>%
       ungroup() %>%
       mutate(est_type = "cdf")
-
+    
     ## recall, q_var is the estimated variance of F(hat(T))
-
+    
     # quantile
     hatq_varsum <-
       bigguy %>%
@@ -985,19 +985,19 @@ samp.f <- function(samp, A, B_MAR_nA, B_MAR_20nA, B_MNAR_1nA, B_MNAR_20nA, r, po
       rowwise() %>%
       mutate(
         LL = ifelse(var_type == "boot",
-          est_quant - qnorm(1 - alp / 2) * sqrt(var_val),
-          LL.q_N
+                    est_quant - qnorm(1 - alp / 2) * sqrt(var_val),
+                    LL.q_N
         ),
         UL = ifelse(var_type == "boot",
-          est_quant + qnorm(1 - alp / 2) * sqrt(var_val),
-          UL.q_N
+                    est_quant + qnorm(1 - alp / 2) * sqrt(var_val),
+                    UL.q_N
         )
       ) %>%
       dplyr::select(-c(LL.q_N, UL.q_N)) %>%
       mutate(CR = ifelse(pop_quant >= LL & pop_quant <= UL, 1, 0)) %>%
       ungroup() %>%
       mutate(est_type = "t")
-
+    
     # new bootstrapped based confidence interval
     crit_vals <-
       boot_var %>%
@@ -1008,28 +1008,28 @@ samp.f <- function(samp, A, B_MAR_nA, B_MAR_20nA, B_MNAR_1nA, B_MNAR_20nA, r, po
         critval_UL = pop_quant + qnorm(1 - alp / 2) * sqrt(boot_var_hatF_hatT)
       ) %>%
       dplyr::select(critval_LL, critval_UL)
-
+    
     mlm_df <- asymp_var_cdf[[2]]
-
+    
     LL_q <- UL_q <- c()
     for (i in 1:nrow(crit_vals)) {
       LL_potential <- try(mlm_df %>%
-        filter(probs >= crit_vals[i, "critval_LL"] %>% unlist()) %>%
-        arrange(t) %>%
-        dplyr::slice(1) %>%
-        dplyr::select(t) %>%
-        unlist(), silent = TRUE)
+                            filter(probs >= crit_vals[i, "critval_LL"] %>% unlist()) %>%
+                            arrange(t) %>%
+                            dplyr::slice(1) %>%
+                            dplyr::select(t) %>%
+                            unlist(), silent = TRUE)
       UL_potential <- try(mlm_df %>%
-        filter(probs >= crit_vals[i, "critval_UL"] %>% unlist()) %>%
-        arrange(t) %>%
-        dplyr::slice(1) %>%
-        dplyr::select(t) %>%
-        unlist(), silent = TRUE)
-
+                            filter(probs >= crit_vals[i, "critval_UL"] %>% unlist()) %>%
+                            arrange(t) %>%
+                            dplyr::slice(1) %>%
+                            dplyr::select(t) %>%
+                            unlist(), silent = TRUE)
+      
       LL_q[i] <- ifelse(length(LL_potential) != 0, LL_potential, NA)
       UL_q[i] <- ifelse(length(UL_potential) != 0, UL_potential, NA)
     }
-
+    
     proposed_boot_results <-
       actual %>%
       filter(name == "hatq") %>%
@@ -1047,25 +1047,25 @@ samp.f <- function(samp, A, B_MAR_nA, B_MAR_20nA, B_MNAR_1nA, B_MNAR_20nA, r, po
         est_type = "t"
       ) %>%
       dplyr::select(colnames(hatq_varsum))
-
+    
     hatq_varsum %<>%
       bind_rows(proposed_boot_results) %>%
       arrange(est_quant)
-
+    
     final <- rbind(mlm_varsum, hatq_varsum) %>%
       dplyr::select(est_type, nB, miss, perc, everything())
     return(final)
   }
-
+  
   final_results <- list(
     var_calcs(A_perm, B_perm_MAR_1nA, L, alp, da_miss = "MAR", da_nB = 1 * nA),
-    var_calcs(A_perm, B_perm_MAR_20nA, L, alp, da_miss = "MAR", da_nB = 20 * nA),
+    var_calcs(A_perm, B_perm_MAR_20nA, L, alp, da_miss = "MAR", da_nB = .20*N),
     var_calcs(A_perm, B_perm_MNAR_1nA, L, alp, da_miss = "MNAR", da_nB = 1 * nA),
-    var_calcs(A_perm, B_perm_MNAR_20nA, L, alp, da_miss = "MNAR", da_nB = 20 * nA)
+    var_calcs(A_perm, B_perm_MNAR_20nA, L, alp, da_miss = "MNAR", da_nB = .20*N)
   ) %>%
     lapply(bind_rows) %>%
     bind_rows()
-
+  
   return(final_results)
 }
 
