@@ -133,37 +133,156 @@ q <- quantile(pop$y, probs = F_N, type = 1)
 # run for model f1
 nBs <- nB[1]
 ts <- q[1]
-mX_bs <- 0 + 4 * x1 + 4 * x2 + 2 * x3 + 2 * x4
-vX <- sqrt(3)
-V2_const <- (1 / nBs) * (nA - 1) / (N * (N - 1)) * 1 / nA
 
 # get variances
 
 ## my beloved
+pop_var_500 <- pop_var_2000 <- c()
 
-V1 <- (1 - nA / N) / nA * var(pnorm((ts - mX_bs) / vX))
+for (i in 1:length(q)) {
+  ts <- q[i]
+  nBs <- 500
 
-V2_2 <- -V2_const * sum(pnorm((ts - mX_bs) / vX))^2
-
-## pain in the ass
-
-raw_index <- expandGrid(
-  ru_it = (ts - mX_bs) / vX,
-  rv_it = (ts - mX_bs) / vX, nThreads = detectCores() - 1, return_df = TRUE
-) %>%
-  mutate(r_min = pmin(ru_it, rv_it)) %>%
-  mutate(G_min = pnorm(r_min)) %>%
-  dplyr::select(G_min) %>%
-  sum()
-
-V2_1 = V2_const * raw_index
-
-pop_var = V1 + V2_1 + V2_2
-
-pop[raw_index["h_it"] %>% unlist(), ] %>%
-  dplyr::select(-c(y, weight, Prob))
+  mX_bs <- 0 + 4 * x1 + 4 * x2 + 2 * x3 + 2 * x4
+  vX <- sqrt(3)
+  V2_const <- (1 / nBs) * (nA - 1) / (N * (N - 1)) * 1 / nA
 
 
+  V1 <- (1 - nA / N) / nA * var(pnorm((ts - mX_bs) / vX))
+
+  V2_2 <- -V2_const * sum(pnorm((ts - mX_bs) / vX))^2
+
+  ## pain in the ass
+
+  raw_index <- expandGrid(
+    ru_it = (ts - mX_bs) / vX,
+    rv_it = (ts - mX_bs) / vX, nThreads = detectCores() - 1, return_df = TRUE
+  ) %>%
+    mutate(r_min = pmin(ru_it, rv_it)) %>%
+    mutate(G_min = pnorm(r_min)) %>%
+    dplyr::select(G_min) %>%
+    sum()
+
+  V2_1 <- V2_const * raw_index
+
+  pop_var_500[i] <- V1 + V2_1 + V2_2
+
+  print(i)
+}
+
+for (i in 1:length(q)) {
+  ts <- q[i]
+  nBs <- 2000
+
+  mX_bs <- 0 + 4 * x1 + 4 * x2 + 2 * x3 + 2 * x4
+  vX <- sqrt(3)
+  V2_const <- (1 / nBs) * (nA - 1) / (N * (N - 1)) * 1 / nA
+
+
+  V1 <- (1 - nA / N) / nA * var(pnorm((ts - mX_bs) / vX))
+
+  V2_2 <- -V2_const * sum(pnorm((ts - mX_bs) / vX))^2
+
+  ## pain in the ass
+
+  raw_index <- expandGrid(
+    ru_it = (ts - mX_bs) / vX,
+    rv_it = (ts - mX_bs) / vX, nThreads = detectCores() - 1, return_df = TRUE
+  ) %>%
+    mutate(r_min = pmin(ru_it, rv_it)) %>%
+    mutate(G_min = pnorm(r_min)) %>%
+    dplyr::select(G_min) %>%
+    sum()
+
+  V2_1 <- V2_const * raw_index
+
+  pop_var_2000[i] <- V1 + V2_1 + V2_2
+
+  print(i)
+}
+
+pop_vars <-
+  data.frame(
+    perc = paste0(c(F_N, F_N) * 100, "%"),
+    F_N = c(F_N, F_N),
+    q = c(q, q),
+    nB = rep(c(500, 2000),
+      each = length(pop_var_500)
+    ), pop_var = c(pop_var_500, pop_var_2000)
+  ) # %>%
+rownames_to_column("perc")
+
+# grab MC variance
+
+setwd("/Users/jeremyflood/Library/CloudStorage/OneDrive-Personal/Documents/Grad School/2024-2025/Fall 2025/reCDF/reCDF/Variance Estimation/Additional Requests/Confirming Variance/")
+perf_df <- openxlsx::read.xlsx("modf1_results.xlsx", sheet = "summary")
+
+cdf_pop_var = perf_df %>%
+  dplyr::select(perc, nB, miss, est_type, perc, var_type, MC_var) %>%
+  filter(
+    est_type == "cdf",
+    var_type == "asymp",
+    miss == "MAR"
+  ) %>%
+  left_join(pop_vars, by = c("perc", "nB")) %>%
+  dplyr::select(-c(var_type, miss, q)) %>%
+  mutate(MC_var = signif(MC_var, digits = 5),
+         pop_var = signif(pop_var, digits = 5),
+         rb = round(100*(MC_var - pop_var)/pop_var, 2)) %>%
+  arrange(nB) %>%
+  dplyr::select(est_type, nB, perc, MC_var, pop_var, diff)
+
+## now for q
+
+ecdf_pop = ecdf(pnorm((y - mX_bs) / vX))
+
+qN_dat = pop %>% dplyr::select(y) %>%
+  mutate(mX = mX_bs) %>%
+  mutate(ecdf_vals =purrr::map(y, function(x){mean(pnorm((x - mX) / vX))}) %>% as.numeric()) %>%  # why tf woud rowwise not work...?
+  arrange(y) %>%
+  ungroup()
+
+search_func <- function(x, ...) {
+  return(
+qN_dat %>%
+  filter(ecdf_vals >= x) %>%
+  arrange(y) %>%
+  dplyr::slice(1) %>%
+  dplyr::select('y') %>%
+  unlist() %>%
+  unname() 
+  )
+}
+  
+pop_qvar_df = pop_vars %>%
+  mutate(
+    UL_crit = F_N + qnorm(1 - .10 / 2) * sqrt(pop_var),
+    LL_crit = F_N - qnorm(1 - .10 / 2) * sqrt(pop_var)
+  ) %>%
+  mutate(LL = purrr::map(LL_crit, search_func) %>% as.numeric(),
+         UL = purrr::map(UL_crit, search_func) %>% as.numeric()) %>%
+  dplyr::select(-c(UL_crit, LL_crit)) %>%
+  mutate(pop_q_var = ((UL-LL)/(2*qnorm(1-.10/2)))^2) %>%
+  dplyr::select(
+    perc,
+    F_N, 
+    q, 
+    nB, pop_q_var
+  )
+
+
+perf_df %>%
+  dplyr::select(perc, nB, miss, est_type, perc, var_type, MC_var) %>%
+  filter(
+    est_type == "t",
+    var_type == "asymp",
+    miss == "MAR"
+  ) %>%
+  left_join(pop_qvar_df, by = c("perc", "nB")) %>%
+  dplyr::select(-c( var_type, miss, q)) %>%
+  mutate(diff = round(MC_var - pop_q_var, 3)) %>%
+  arrange(nB) %>%
+  dplyr::select(est_type, nB, perc, MC_var, pop_q_var, diff)
 
 Rh_df <- pop[raw_index["h_it"] %>% unlist(), ] %>%
   dplyr::select(-c(y, weight, Prob)) %>%
