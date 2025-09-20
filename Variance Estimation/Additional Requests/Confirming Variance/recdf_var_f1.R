@@ -79,13 +79,13 @@ require(RcppAlgos)
 require(gitcreds)
 
 seed <- 101
-nsim <- 5000 # if you wish to change L, make sure to also change it in the function below.
 L <- 1
 N <- 10000
 nA <- .05*N
 alp <- .10
 mod <- "f1"
 r <- .15
+nsim <- N # if you wish to change L, make sure to also change it in the function below.
 
 # Superpopulation Model
 if (mod == "f1") {
