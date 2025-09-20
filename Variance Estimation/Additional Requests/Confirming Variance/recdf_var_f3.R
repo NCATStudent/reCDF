@@ -79,7 +79,8 @@ require(RcppAlgos)
 require(gitcreds)
 
 seed <- 101
-nsim <- L <- 750 # if you wish to change L, make sure to also change it in the function below.
+nsim <- 5000 # if you wish to change L, make sure to also change it in the function below.
+L <- 1
 N <- 10000
 nA <- .05*N
 alp <- .10
@@ -185,11 +186,11 @@ B_generator <- function(miss, nB, r) {
 
 Bs_MAR_1nA <- mclapply(1:nsim, function(seed) {
   B_generator(miss = "MAR", nB = .05*N, r = r)
-}, mc.cores = 7)
+}, mc.cores = 10)
 
 Bs_MAR_20nA <- mclapply(1:nsim, function(seed) {
   B_generator(miss = "MAR", nB = .20*N, r = r)
-}, mc.cores = 7)
+}, mc.cores = 10)
 
 
 
@@ -197,11 +198,11 @@ Bs_MAR_20nA <- mclapply(1:nsim, function(seed) {
 
 Bs_MNAR_1nA <- mclapply(1:nsim, function(seed) {
   B_generator(miss = "MNAR", nB = .05*N, r = r)
-}, mc.cores = 7)
+}, mc.cores = 10)
 
 Bs_MNAR_20nA <- mclapply(1:nsim, function(seed) {
   B_generator(miss = "MNAR", nB = .20*N, r = r)
-}, mc.cores = 7)
+}, mc.cores = 10)
 
 # for testing
 # B_perm_MAR_1nA= Bs_MAR_1nA[[1]]
@@ -213,7 +214,7 @@ Bs_MNAR_20nA <- mclapply(1:nsim, function(seed) {
 
 
 
-samp.f <- function(samp, A, B_MAR_nA, B_MAR_20nA, B_MNAR_1nA, B_MNAR_20nA, r, pop, p, miss, L = 750, mc_cores = 15, alp = .10, seed = 101) {
+samp.f <- function(samp, A, B_MAR_nA, B_MAR_20nA, B_MNAR_1nA, B_MNAR_20nA, r, pop, p, miss, L = 1, mc_cores = 15, alp = .10, seed = 101) {
   options(dplyr.summarise.inform = FALSE)
   
   var_cdf <- function(B, A, p, alp, da_miss, isboot, mc_cores = 15) {
@@ -316,7 +317,7 @@ samp.f <- function(samp, A, B_MAR_nA, B_MAR_20nA, B_MNAR_1nA, B_MNAR_20nA, r, po
         vars_to[i] <- NA
       }
     } else {
-      vars_to_results <- pbmcmapply(
+      vars_to_results <- mcmapply(
         FUN = mlm_est_func,
         qN_vals = q_N,
         MoreArgs = (
@@ -642,7 +643,7 @@ samp.f <- function(samp, A, B_MAR_nA, B_MAR_20nA, B_MNAR_1nA, B_MNAR_20nA, r, po
                 dplyr::select(colnames(final_cdf))) %>%
         dplyr::select(-c(group, val))
     } else {
-      qvar_results <- pbmcmapply(
+      qvar_results <- mcmapply(
         FUN = quant_est,
         F_N = F_N,
         MoreArgs = (
@@ -804,7 +805,7 @@ samp.f <- function(samp, A, B_MAR_nA, B_MAR_20nA, B_MNAR_1nA, B_MNAR_20nA, r, po
   
   # For each a in A and b in B, compute bootstrap replicates
   #
-  results.MAR_1nA <- pbmcmapply(
+  results.MAR_1nA <- mcmapply(
     FUN = var_cdf,
     A = A_list,
     B = B_list.MAR_1nA,
@@ -813,28 +814,28 @@ samp.f <- function(samp, A, B_MAR_nA, B_MAR_20nA, B_MNAR_1nA, B_MNAR_20nA, r, po
     SIMPLIFY = FALSE
   )
   
-  results.MAR_20nA <- pbmcmapply(var_cdf,
-                                 A = A_list,
-                                 B = B_list.MAR_20nA,
-                                 MoreArgs = list("p" = p, "alp" = .10, da_miss = "MAR", isboot = TRUE),
-                                 mc.cores = mc_cores,
-                                 SIMPLIFY = FALSE
+  results.MAR_20nA <- mcmapply(var_cdf,
+                               A = A_list,
+                               B = B_list.MAR_20nA,
+                               MoreArgs = list("p" = p, "alp" = .10, da_miss = "MAR", isboot = TRUE),
+                               mc.cores = mc_cores,
+                               SIMPLIFY = FALSE
   )
   
-  results.MNAR_1nA <- pbmcmapply(var_cdf,
-                                 A = A_list,
-                                 B = B_list.MNAR_1nA,
-                                 MoreArgs = list("p" = p, "alp" = .10, da_miss = "MAR", isboot = TRUE),
-                                 mc.cores = mc_cores,
-                                 SIMPLIFY = FALSE
+  results.MNAR_1nA <- mcmapply(var_cdf,
+                               A = A_list,
+                               B = B_list.MNAR_1nA,
+                               MoreArgs = list("p" = p, "alp" = .10, da_miss = "MAR", isboot = TRUE),
+                               mc.cores = mc_cores,
+                               SIMPLIFY = FALSE
   )
   
-  results.MNAR_20nA <- pbmcmapply(var_cdf,
-                                  A = A_list,
-                                  B = B_list.MNAR_20nA,
-                                  MoreArgs = list("p" = p, "alp" = .10, da_miss = "MAR", isboot = TRUE),
-                                  mc.cores = mc_cores,
-                                  SIMPLIFY = FALSE
+  results.MNAR_20nA <- mcmapply(var_cdf,
+                                A = A_list,
+                                B = B_list.MNAR_20nA,
+                                MoreArgs = list("p" = p, "alp" = .10, da_miss = "MAR", isboot = TRUE),
+                                mc.cores = mc_cores,
+                                SIMPLIFY = FALSE
   )
   
   results2 <- list(
@@ -1070,7 +1071,7 @@ samp.f <- function(samp, A, B_MAR_nA, B_MAR_20nA, B_MNAR_1nA, B_MNAR_20nA, r, po
 }
 
 results <- c()
-for (i in 395:nsim) {
+for (i in 1:nsim) {
   results[[i]] <- samp.f(
     A = As[[i]],
     B_MAR_nA = Bs_MAR_1nA[[i]],
