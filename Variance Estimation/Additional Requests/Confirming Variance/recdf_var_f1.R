@@ -78,18 +78,8 @@ require(styler)
 require(RcppAlgos)
 require(gitcreds)
 
-seed <- 101
-L <- 1
-N <- 10000
-nA <- .05 * N
-alp <- .10
-mod <- "f1"
-r <- .15
-nsim <- 2000 # if you wish to change L, make sure to also change it in the function below.
-
-
 # Superpopulation Model
-f_var_check <- function(N, nsim = 1500, mod = 'f1') {
+f_var_check <- function(N, nsim = 5000, mod = 'f1') {
   seed <- 101
   L <- 1
   nA <- .05 * N
@@ -1114,7 +1104,7 @@ f_var_check <- function(N, nsim = 1500, mod = 'f1') {
   mc_results <- cleaned_ddf %>%
     # filter(var_name == 'asymp') %>%
     group_by(perc, miss, nB, est_type, var_type) %>%
-    dplyr::summarize(MC_var = var(est_quant))
+    dplyr::summarize(MC_var = var(est_quant, na.rm = TRUE))
 
 
   cleaned_results <- cleaned_ddf %>%
