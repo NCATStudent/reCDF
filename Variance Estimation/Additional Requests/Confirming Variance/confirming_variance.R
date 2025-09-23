@@ -72,6 +72,29 @@ require(latex2exp)
 require(ggplot2)
 require(RcppAlgos)
 
+# get data
+
+setwd('/Users/jeremyflood/Library/CloudStorage/OneDrive-Personal/Documents/Grad School/2024-2025/Fall 2025/reCDF/reCDF/Variance Estimation/Additional Requests/Confirming Variance/smaller N/Data/Cached Iter Files')
+total_dat = c()
+
+for (i in 1:length(list.files())){
+  total_dat[[i]] = openxlsx::read.xlsx(list.files()[i], sheet = 'summary')
+  print(paste0('completed ', i, 'out of ', length(list.files())))
+}
+
+MC_var_results = total_dat %>%
+  bind_rows() %>%
+  mutate(N = nB/.20) %>%
+  filter(var_type == 'asymp', miss == 'MAR') %>%
+  arrange(N) %>%
+  dplyr::select(
+    perc, est_type, MC_var, nB, N
+  )
+
+N_vect = MC_var_results$N %>% table() %>% names()
+
+#
+
 N <- 10000
 nB <- c(.05, .20) * N
 nA <- .05 * N
@@ -214,7 +237,7 @@ rownames_to_column("perc")
 
 # grab MC variance
 
-setwd("/Users/jeremyflood/Library/CloudStorage/OneDrive-Personal/Documents/Grad School/2024-2025/Fall 2025/reCDF/reCDF/Variance Estimation/Additional Requests/Confirming Variance/")
+setwd("/Users/jeremyflood/Library/CloudStorage/OneDrive-Personal/Documents/Grad School/2024-2025/Fall 2025/reCDF/reCDF/Variance Estimation/Additional Requests/Confirming Variance/smaller N/Data/")
 perf_df <- openxlsx::read.xlsx("modf1_results.xlsx", sheet = "summary")
 
 cdf_pop_var = perf_df %>%
@@ -226,11 +249,13 @@ cdf_pop_var = perf_df %>%
   ) %>%
   left_join(pop_vars, by = c("perc", "nB")) %>%
   dplyr::select(-c(var_type, miss, q)) %>%
-  mutate(MC_var = signif(MC_var, digits = 5),
-         pop_var = signif(pop_var, digits = 5),
-         rb = round(100*(MC_var - pop_var)/pop_var, 2)) %>%
+  mutate(MC_var_x100 = round(MC_var * 100, digits = 4),
+         pop_var_x100 = round(pop_var * 100, digits = 4),
+        # diff_x100 = MC_var_x100 - pop_var_x100,
+         rb = round((MC_var*100 - pop_var*100)/(pop_var*100), 2) ) %>%
   arrange(nB) %>%
-  dplyr::select(est_type, nB, perc, MC_var, pop_var, diff)
+  
+  dplyr::select(est_type, nB, perc, MC_var_x100, pop_var_x100, rb)
 
 ## now for q
 
@@ -280,9 +305,10 @@ perf_df %>%
   ) %>%
   left_join(pop_qvar_df, by = c("perc", "nB")) %>%
   dplyr::select(-c( var_type, miss, q)) %>%
-  mutate(diff = round(MC_var - pop_q_var, 3)) %>%
+  mutate(diff = round(MC_var - pop_q_var, 3),
+         rb = round((MC_var - pop_q_var)/pop_q_var, digits = 2)) %>%
   arrange(nB) %>%
-  dplyr::select(est_type, nB, perc, MC_var, pop_q_var, diff)
+  dplyr::select(est_type, nB, perc, MC_var, pop_q_var, rb)
 
 Rh_df <- pop[raw_index["h_it"] %>% unlist(), ] %>%
   dplyr::select(-c(y, weight, Prob)) %>%

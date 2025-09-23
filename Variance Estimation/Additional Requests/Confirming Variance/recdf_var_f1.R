@@ -1135,4 +1135,4 @@ f_var_check <- function(N, nsim = 5000, mod = 'f1') {
   openxlsx::write.xlsx(final_results, paste0("modf1_N_", N, "_results.xlsx"))
 }
 
-mapply(f_var_check, N = seq(1000, 10000, by = 1000))
+mapply(f_var_check, N = seq(1000, 10000, by = 100)[seq(1000, 10000, by = 100) %notin%  seq(1000, 10000, by = 1000)])
