@@ -79,7 +79,7 @@ require(RcppAlgos)
 require(gitcreds)
 
 seed <- 101
-nsim <- L <- 1500 # if you wish to change L, make sure to also change it in the function below.
+nsim <- L <- 1500
 N <- 1e05
 nA <- 1000
 alp <- .10
@@ -185,11 +185,11 @@ B_generator <- function(miss, nB, r) {
 
 Bs_MAR_1nA <- mclapply(1:nsim, function(seed) {
   B_generator(miss = "MAR", nB = 1000, r = r)
-}, mc.cores = 7)
+}, mc.cores = 12)
 
 Bs_MAR_20nA <- mclapply(1:nsim, function(seed) {
   B_generator(miss = "MAR", nB = 20 * nA, r = r)
-}, mc.cores = 7)
+}, mc.cores = 12)
 
 
 
@@ -197,11 +197,11 @@ Bs_MAR_20nA <- mclapply(1:nsim, function(seed) {
 
 Bs_MNAR_1nA <- mclapply(1:nsim, function(seed) {
   B_generator(miss = "MNAR", nB = 1000, r = r)
-}, mc.cores = 7)
+}, mc.cores = 12)
 
 Bs_MNAR_20nA <- mclapply(1:nsim, function(seed) {
   B_generator(miss = "MNAR", nB = 20 * nA, r = r)
-}, mc.cores = 7)
+}, mc.cores = 12)
 
 # for testing
 # B_perm_MAR_1nA= Bs_MAR_1nA[[1]]
@@ -209,14 +209,14 @@ Bs_MNAR_20nA <- mclapply(1:nsim, function(seed) {
 # B_perm_MNAR_1nA = Bs_MNAR_1nA[[1]]
 # B_perm_MNAR_20nA = Bs_MNAR_20nA[[1]]
 # A = As[[1]]
-# B = B_perm_MNAR_20nA
+# B = B_perm_MNAR_1nA
 
 
 
-samp.f <- function(samp, A, B_MAR_nA, B_MAR_20nA, B_MNAR_1nA, B_MNAR_20nA, r, pop, p, miss, L = 1500, mc_cores = 15, alp = .10, seed = 101) {
+samp.f <- function(samp, A, B_MAR_nA, B_MAR_20nA, B_MNAR_1nA, B_MNAR_20nA, r, pop, p, miss, mc_cores = 20, alp = .10, seed = 101) {
   options(dplyr.summarise.inform = FALSE)
 
-  var_cdf <- function(B, A, p, alp, da_miss, isboot, mc_cores = 15) {
+  var_cdf <- function(B, A, p, alp, da_miss, isboot, mc_cores = 20) {
     nA <- nrow(A)
     nB <- nrow(B)
     # defining A
@@ -262,45 +262,55 @@ samp.f <- function(samp, A, B_MAR_nA, B_MAR_20nA, B_MNAR_1nA, B_MNAR_20nA, r, po
     mlm_est_func <- function(qN_vals, nA) {
       m_lm <- (1 / sum(A$weight)) * sum(A$weight * e_ecdf(qN_vals - lm_pred_A))
 
-      v1 <- (1 - nA / N) / nA * var(e_ecdf(qN_vals - lm_pred_A))
+      # define incl probs
+
+      v1 <- nB / (nB - 1) * (1 - (nA / N)) / nA * var(e_ecdf(qN_vals - lm_pred_A))
+      v2 <- -1 / (nB - 1) * (1 - (nA / N)) / nA * var(e_ecdf(qN_vals - lm_pred_A))
 
       # this part is gonna be computationally painful, fair warning :/
-      raw_index <- expandGird(nThreads = detectCores() -1, return_df = TRUE,i_it = 1:nA, h_it = 1:nA)
+      raw_index <- expandGrid(nThreads = mc_cores, return_df = TRUE, i_it = 1:nA, h_it = 1:nA)
 
       Rh_df <- A[raw_index["h_it"] %>% unlist(), ] %>%
         dplyr::select(-c(y, weight, Prob)) %>%
         mutate(Rh = qN_vals - predict(lm_B, newdata = .)) %>%
-        mutate(h_it = raw_index["h_it"]) %>%
+        mutate(h_it = raw_index["h_it"] %>% unlist()) %>%
         dplyr::select(h_it, Rh)
 
       Ri_df <- A[raw_index["i_it"] %>% unlist(), ] %>%
         dplyr::select(-c(y, weight, Prob)) %>%
         mutate(Ri = qN_vals - predict(lm_B, newdata = .)) %>%
-        mutate(i_it = raw_index["i_it"]) %>%
+        mutate(i_it = raw_index["i_it"] %>% unlist()) %>%
         dplyr::select(i_it, Ri)
 
       da_Ghats <- Rh_df %>%
         cbind(Ri_df) %>%
         mutate(da_min = pmin(Rh, Ri)) %>%
         dplyr::select(
-          h_it, i_it, everything()
+          h_it, i_it,
+          da_min, Rh, Ri
         ) %>%
+        mutate(weight = ifelse(
+          h_it == i_it,
+          N / nA, N * (N - 1) / (nA * (nA - 1))
+        )) %>%
         mutate(
-          Ghat_min = e_ecdf(da_min)
+          Ghat_min = e_ecdf(da_min),
+          G_h = e_ecdf(Rh),
+          G_i = e_ecdf(Ri)
         ) %>%
-        dplyr::select(Ghat_min) %>%
+        dplyr::select(-c(Rh, Ri, da_min)) %>%
+        mutate(
+          da_thing =
+            weight * (
+              Ghat_min - G_h * G_i
+            )
+        ) %>%
+        dplyr::select(da_thing) %>%
         unlist()
 
-      v2_1 <- sum(da_Ghats) * (1 / (nB * nA^2))
+      v3 <- sum(da_Ghats) * (1 / (N^2)) * (1 / (nB - 1))
 
-      # now the other one
-      v2_2 <- (1 / (nA^2 * nB)) * sum(A %>%
-        dplyr::select(-c(weight, y, Prob)) %>%
-        mutate(Rh = qN_vals - predict(lm_B, newdata = .)) %>%
-        mutate(Ghat_h = e_ecdf(Rh)) %>%
-        dplyr::select(Ghat_h) %>%
-        unlist())^2
-      vars_to <- v1 + (v2_1 - v2_2)
+      vars_to <- v1 + v2 + v3
 
       return(data.frame(
         vars_to,
@@ -316,7 +326,7 @@ samp.f <- function(samp, A, B_MAR_nA, B_MAR_20nA, B_MNAR_1nA, B_MNAR_20nA, r, po
         vars_to[i] <- NA
       }
     } else {
-      vars_to_results <- pbmcmapply(
+      vars_to_results <- mcmapply(
         FUN = mlm_est_func,
         qN_vals = q_N,
         MoreArgs = (
@@ -423,46 +433,57 @@ samp.f <- function(samp, A, B_MAR_nA, B_MAR_20nA, B_MNAR_1nA, B_MNAR_20nA, r, po
 
       hatF_hatT <- (1 / sum(A$weight)) * sum(A$weight * e_ecdf(hatq - lm_pred_A))
 
+      # define incl probs
 
-      v1 <- (1 - nA / N) / nA * var(e_ecdf(hatq - lm_pred_A))
+      v1 <- nB / (nB - 1) * (1 - (nA / N)) / nA * var(e_ecdf(hatq - lm_pred_A))
+      v2 <- -1 / (nB - 1) * (1 - (nA / N)) / nA * var(e_ecdf(hatq - lm_pred_A))
 
-      # this part has to get the min, fair warning :/
-      raw_index <- expandGird(nThreads = detectCores() -1, return_df = TRUE,i_it = 1:nA, h_it = 1:nA)
+      # this part is gonna be computationally painful, fair warning :/
+      raw_index <- expandGrid(nThreads = mc_cores, return_df = TRUE, i_it = 1:nA, h_it = 1:nA)
 
       Rh_df <- A[raw_index["h_it"] %>% unlist(), ] %>%
         dplyr::select(-c(y, weight, Prob)) %>%
         mutate(Rh = hatq - predict(lm_B, newdata = .)) %>%
-        mutate(h_it = raw_index["h_it"]) %>%
+        mutate(h_it = raw_index["h_it"] %>% unlist()) %>%
         dplyr::select(h_it, Rh)
 
       Ri_df <- A[raw_index["i_it"] %>% unlist(), ] %>%
         dplyr::select(-c(y, weight, Prob)) %>%
         mutate(Ri = hatq - predict(lm_B, newdata = .)) %>%
-        mutate(i_it = raw_index["i_it"]) %>%
+        mutate(i_it = raw_index["i_it"] %>% unlist()) %>%
         dplyr::select(i_it, Ri)
+
+      # this part is gonna be computationally painful, fair warning :/
 
       da_Ghats <- Rh_df %>%
         cbind(Ri_df) %>%
         mutate(da_min = pmin(Rh, Ri)) %>%
         dplyr::select(
-          h_it, i_it, everything()
+          h_it, i_it,
+          da_min, Rh, Ri
         ) %>%
+        mutate(weight = ifelse(
+          h_it == i_it,
+          N / nA, N * (N - 1) / (nA * (nA - 1))
+        )) %>%
         mutate(
-          Ghat_min = e_ecdf(da_min)
+          Ghat_min = e_ecdf(da_min),
+          G_h = e_ecdf(Rh),
+          G_i = e_ecdf(Ri)
         ) %>%
-        dplyr::select(Ghat_min) %>%
+        dplyr::select(-c(Rh, Ri, da_min)) %>%
+        mutate(
+          da_thing =
+            weight * (
+              Ghat_min - G_h * G_i
+            )
+        ) %>%
+        dplyr::select(da_thing) %>%
         unlist()
 
-      v2_1 <- sum(da_Ghats) * (1 / (nB * nA^2))
+      v3 <- sum(da_Ghats) * (1 / (N^2)) * (1 / (nB - 1))
 
-      # now the other one
-      v2_2 <- (1 / (nA^2 * nB)) * sum(A %>%
-        dplyr::select(-c(weight, y, Prob)) %>%
-        mutate(Rh = hatq - predict(lm_B, newdata = .)) %>%
-        mutate(Ghat_h = e_ecdf(Rh)) %>%
-        dplyr::select(Ghat_h) %>%
-        unlist())^2
-      vars_q <- v1 + (v2_1 - v2_2)
+      vars_q <- v1 + v2 + v3
 
 
       LL.q_N <- list(mlm_df) %>%
@@ -642,7 +663,7 @@ samp.f <- function(samp, A, B_MAR_nA, B_MAR_20nA, B_MNAR_1nA, B_MNAR_20nA, r, po
           dplyr::select(colnames(final_cdf))) %>%
         dplyr::select(-c(group, val))
     } else {
-      qvar_results <- pbmcmapply(
+      qvar_results <- mcmapply(
         FUN = quant_est,
         F_N = F_N,
         MoreArgs = (
@@ -804,7 +825,7 @@ samp.f <- function(samp, A, B_MAR_nA, B_MAR_20nA, B_MNAR_1nA, B_MNAR_20nA, r, po
 
   # For each a in A and b in B, compute bootstrap replicates
   #
-  results.MAR_1nA <- pbmcmapply(
+  results.MAR_1nA <- mcmapply(
     FUN = var_cdf,
     A = A_list,
     B = B_list.MAR_1nA,
@@ -813,7 +834,7 @@ samp.f <- function(samp, A, B_MAR_nA, B_MAR_20nA, B_MNAR_1nA, B_MNAR_20nA, r, po
     SIMPLIFY = FALSE
   )
 
-  results.MAR_20nA <- pbmcmapply(var_cdf,
+  results.MAR_20nA <- mcmapply(var_cdf,
     A = A_list,
     B = B_list.MAR_20nA,
     MoreArgs = list("p" = p, "alp" = .10, da_miss = "MAR", isboot = TRUE),
@@ -821,7 +842,7 @@ samp.f <- function(samp, A, B_MAR_nA, B_MAR_20nA, B_MNAR_1nA, B_MNAR_20nA, r, po
     SIMPLIFY = FALSE
   )
 
-  results.MNAR_1nA <- pbmcmapply(var_cdf,
+  results.MNAR_1nA <- mcmapply(var_cdf,
     A = A_list,
     B = B_list.MNAR_1nA,
     MoreArgs = list("p" = p, "alp" = .10, da_miss = "MAR", isboot = TRUE),
@@ -829,7 +850,7 @@ samp.f <- function(samp, A, B_MAR_nA, B_MAR_20nA, B_MNAR_1nA, B_MNAR_20nA, r, po
     SIMPLIFY = FALSE
   )
 
-  results.MNAR_20nA <- pbmcmapply(var_cdf,
+  results.MNAR_20nA <- mcmapply(var_cdf,
     A = A_list,
     B = B_list.MNAR_20nA,
     MoreArgs = list("p" = p, "alp" = .10, da_miss = "MAR", isboot = TRUE),
@@ -1081,7 +1102,7 @@ for (i in 1:nsim) {
   )
   # in case computer dies, cache every 100 iters
   if (i %% 100 == 0) {
-    setwd('/Users/jeremyflood/Library/CloudStorage/OneDrive-Personal/Documents/Grad School/2024-2025/Fall 2025/reCDF/reCDF/Variance Estimation/Additional Requests/Confirming Variance/smaller N/Data/Cached Iter Files')
+    setwd("/Users/jeremyflood/Library/CloudStorage/OneDrive-Personal/Documents/Grad School/2024-2025/Fall 2025/reCDF/reCDF/Variance Estimation/Data/Cached Iter Files (with new variance formula)/f1_results")
     results[(i - 100):100] %>%
       bind_rows() %>%
       mutate(mod = mod) %>%
@@ -1116,7 +1137,7 @@ cleaned_results <- cleaned_ddf %>%
   group_by(est_type, perc, miss, nB, var_type, name) %>%
   dplyr::summarize(
     pop_quant = mean(pop_quant, na.rm = TRUE),
-    est_value = mean(value, na.rm= TRUE),
+    est_value = mean(value, na.rm = TRUE),
     est_var = mean(var_val, na.rm = TRUE),
     CR = mean(CR, na.rm = TRUE),
     d = mean(UL - LL, na.rm = TRUE)
@@ -1133,5 +1154,5 @@ final_results <- list(
 
 names(final_results) <- c("raw", "summary")
 
-setwd('/Users/jeremyflood/Library/CloudStorage/OneDrive-Personal/Documents/Grad School/2024-2025/Fall 2025/reCDF/reCDF/Variance Estimation/Additional Requests/Confirming Variance/smaller N/Data')
+setwd("/Users/jeremyflood/Library/CloudStorage/OneDrive-Personal/Documents/Grad School/2024-2025/Fall 2025/reCDF/reCDF/Variance Estimation/Data/Cached Iter Files (with new variance formula)/f1_results/")
 openxlsx::write.xlsx(final_results, paste0("modf1_results.xlsx"))
