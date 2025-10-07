@@ -1127,7 +1127,7 @@ cleaned_ddf <- results %>%
 mc_results <- cleaned_ddf %>%
   # filter(var_name == 'asymp') %>%
   group_by(perc, miss, nB, est_type, var_type) %>%
-  dplyr::summarize(MC_var = var(est_quant))
+  dplyr::summarize(MC_var = var(est_quant,na.rm = TRUE))
 
 
 cleaned_results <- cleaned_ddf %>%

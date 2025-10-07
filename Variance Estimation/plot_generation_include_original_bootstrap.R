@@ -1,10 +1,30 @@
-# plot generation
+# taking a peak at the data
 
+new_f1_dat = read.xlsx('modf1_results.xlsx', sheet = 'summary') %>%
+  filter(var_type == 'asymp') %>%
+  dplyr::select(-seed)
+
+setwd('/Users/jeremyflood/Library/CloudStorage/OneDrive-Personal/Documents/Grad School/2024-2025/Fall 2025/reCDF/reCDF/Variance Estimation/Data/Cached Iter Files (with new variance formula)/f3_results/')
+new_f3_dat = read.xlsx('modf3_results.xlsx', sheet = 'summary') %>%
+  filter(var_type == 'asymp') %>%
+  dplyr::select(-seed)
+
+# get bootstrap results
 setwd("/Users/jeremyflood/Library/CloudStorage/OneDrive-Personal/Documents/Grad School/2024-2025/Fall 2025/reCDF/reCDF/Variance Estimation/Data")
 
-cleaned_results <-
+old_boots =  
   openxlsx::read.xlsx("final_agg_results.xlsx", sheet = "summary") %>%
-  bind_rows() #%>% #what if we kept the (previous) bootstrap t?
+  filter(var_type != 'asymp') %>%
+    mutate(filter_cond = ifelse(est_type == 't' & var_type == 'boot2', 'gtg', 
+                                ifelse(est_type == 'cdf', 'gtg', 'remove'))) %>%
+    filter(filter_cond != 'remove') %>%
+    dplyr::select(-c(filter_cond)) %>%
+    mutate(var_type = 'boot')
+
+# combine
+cleaned_results = rbind(new_f1_dat,
+      new_f3_dat,
+      old_boots)  #%>% #what if we kept the (previous) bootstrap t?
   # mutate(var_type = ifelse(
   #   est_type == "t" & var_type == "boot", "boot_ignore", var_type
   # )) %>%
@@ -14,7 +34,52 @@ cleaned_results <-
   # )) %>%
   # dplyr::select(-name) # needs to be checked for general case of all data together; my data looks interesting bc for loop failed and needed to depend on cached results
 
+## MC var is wrong (doesn't drop NAs, we can fix this)
+setwd('/Users/jeremyflood/Library/CloudStorage/OneDrive-Personal/Documents/Grad School/2024-2025/Fall 2025/reCDF/reCDF/Variance Estimation/Data/Cached Iter Files (with new variance formula)/f1_results/')
 
+MCvar_f1 = read.xlsx('modf1_results.xlsx', sheet = 'raw') %>%
+  group_by(
+    est_type,
+    nB,
+    miss,
+    perc,
+    var_type,
+    mod
+  ) %>%
+  dplyr::summarize(
+    MC_var = var(est_quant, na.rm = TRUE)
+  )
+
+setwd('/Users/jeremyflood/Library/CloudStorage/OneDrive-Personal/Documents/Grad School/2024-2025/Fall 2025/reCDF/reCDF/Variance Estimation/Data/Cached Iter Files (with new variance formula)/f3_results/')
+MCvar_f3 =read.xlsx('modf3_results.xlsx', sheet = 'raw') %>%
+  group_by(
+    est_type,
+    nB,
+    miss,
+    perc,
+    var_type,
+    mod
+  ) %>%
+  dplyr::summarize(
+    MC_var = var(est_quant, na.rm = TRUE)
+  )
+
+cleaned_results %<>%
+  dplyr::select(-MC_var) %>%
+  left_join(
+    rbind(MCvar_f1, MCvar_f3),
+    by = c(
+      'est_type',
+      'nB',
+      'miss',
+      'perc',
+      'var_type',
+      'mod'
+    )
+  ) %>%
+  mutate(rb =  ((MC_var - est_var) / MC_var) * 100)
+
+setwd('/Users/jeremyflood/Library/CloudStorage/OneDrive-Personal/Documents/Grad School/2024-2025/Fall 2025/reCDF/reCDF/Variance Estimation/Data/Cached Iter Files (with new variance formula)/')
 plots <- c()
 
 mods <- c(1, 3)
@@ -68,7 +133,7 @@ for (i in 1:length(mods)) {
 TN_plots <- c()
 
 for (i in 1:length(mods)) {
- # TN_plots[[i]] <-
+  TN_plots[[i]] <-
     cleaned_results %>%
     filter(mod == paste0("f", mods[i]), est_type == "t") %>% # for now
     mutate(se_val = sqrt(est_var)) %>%

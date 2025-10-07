@@ -74,16 +74,13 @@ require(RcppAlgos)
 
 # get data
 
-setwd("/Users/jeremyflood/Library/CloudStorage/OneDrive-Personal/Documents/Grad School/2024-2025/Fall 2025/reCDF/reCDF/Variance Estimation/Additional Requests/Confirming Variance/smaller N/Data/Cached Iter Files")
+setwd('/Users/jeremyflood/Library/CloudStorage/OneDrive-Personal/Documents/Grad School/2024-2025/Fall 2025/reCDF/reCDF/Variance Estimation/Additional Requests/Confirming Variance/smaller N/Data/Cleaned Results')
 total_dat <- c()
 
 for (i in 1:length(list.files())) {
   total_dat[[i]] <-
-    if (i == 1) {
-      openxlsx::read.xlsx(list.files()[i], sheet = "summary") %>% filter(nB == 2000)
-    } else {
       openxlsx::read.xlsx(list.files()[i], sheet = "summary")
-    }
+    
   print(paste0("completed ", i, " out of ", length(list.files())))
 }
 
@@ -269,10 +266,12 @@ actual_var_df %>%
   mutate(abs_diff = abs(pop_var - MC_var), nB= factor(nB)) %>%
   mutate(abs_diff = ifelse(group == 'q' & perc == '99%', NA, abs_diff)) %>%
   filter(nB %in% c(
-    200,
+   # 200,
     400,
-    800,
-    1600
+    600,
+    1000,
+    1600,
+    2000
   )) %>%
   ggplot(aes(x = perc, y = abs_diff, color = nB, group = nB)) +
   geom_line(linewidth = .5) +
